@@ -350,80 +350,166 @@
     cursor: pointer;
   }
 
-  /* ========== Quote Preview ========== */
+  /* ========== Quotation Preview (Squirrel Designer 风格) ========== */
+  :root {
+    --secondary: #6B6B5D;   /* Squirrel Designer 主色 (深绿灰) */
+    --bg-white: #fff;
+    --text-dark: #2c3e50;
+    --border: #e9ecef;
+  }
   .quote-preview {
-    padding: 32px;
-    background: #fff;
-    color: #2c3e50;
-  }
-  .quote-preview .qp-header {
-    text-align: center;
-    border-bottom: 2px solid #2a5298;
-    padding-bottom: 16px;
-    margin-bottom: 20px;
-  }
-  .quote-preview .qp-header h1 {
-    font-size: 24px;
-    color: #1e3c72;
-    margin-bottom: 4px;
-  }
-  .quote-preview .qp-header .proj-no {
-    color: #6c757d;
-    font-size: 14px;
-  }
-  .quote-preview .qp-info {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px 24px;
-    margin-bottom: 20px;
+    background: var(--bg-white);
+    padding: 30px 40px;
+    color: var(--text-dark);
     font-size: 13px;
   }
-  .quote-preview .qp-info .field { display: flex; }
-  .quote-preview .qp-info .field .label {
-    color: #6c757d;
-    min-width: 80px;
+  .quote-preview .quotation-title {
+    font-size: 28px;
+    color: var(--secondary);
+    margin-bottom: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
   }
-  .quote-preview .qp-info .field .value {
-    color: #2c3e50;
-    font-weight: 500;
+  .quote-preview .quotation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 3px solid var(--secondary);
   }
-  .quote-preview table {
+  .quote-preview .quotation-info {
+    font-size: 14px;
+    color: var(--text-dark);
+    line-height: 2;
+    white-space: nowrap;
+  }
+  .quote-preview .quotation-info .row { display: flex; }
+  .quote-preview .quotation-info .row strong {
+    color: var(--secondary);
+    display: inline-block;
+    width: 140px;
+    font-weight: 600;
+  }
+  .quote-preview .quotation-logo { text-align: right; }
+  .quote-preview .quotation-logo img {
+    max-height: 80px;
+    max-width: 200px;
+    margin-bottom: 6px;
+  }
+  .quote-preview .quotation-logo .company-name {
+    font-size: 11px;
+    font-weight: 700;
+    color: #333;
+    line-height: 1.3;
+  }
+  .quote-preview .quotation-logo p {
+    font-size: 9px;
+    color: #666;
+    line-height: 1.4;
+    margin: 0;
+  }
+  .quote-preview .quotation-table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 16px;
+    font-size: 11px;
+    margin: 20px 0;
   }
-  .quote-preview th {
-    background: #2a5298;
-    color: #fff;
-    padding: 8px;
-    font-size: 12px;
+  .quote-preview .quotation-table th {
+    background: var(--secondary);
+    color: white;
+    padding: 12px 8px;
+    text-align: left;
+    font-weight: 500;
+  }
+  .quote-preview .quotation-table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .quote-preview .quotation-table tr.area-subtotal td {
+    background: var(--secondary);
+    color: white;
+    font-weight: 700;
+  }
+  .quote-preview .quotation-table tr.area-subtotal td.label {
+    text-align: right;
+  }
+  .quote-preview .quotation-table tr.area-subtotal td:last-child {
+    text-align: right;
+  }
+  .quote-preview .quotation-table td.dimension,
+  .quote-preview .quotation-table td.value,
+  .quote-preview .quotation-table td.qty,
+  .quote-preview .quotation-table td.total {
+    white-space: nowrap;
+  }
+  .quote-preview .quotation-table td.remarks-cell {
+    font-size: 9px;
+    color: #666;
+  }
+  .quote-preview .quotation-totals {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    margin-top: 15px;
+  }
+  .quote-preview .quotation-totals .remarks-box {
+    flex: 1;
+    padding: 8px 10px;
+    background: #f9f9f9;
+    border-left: 3px solid var(--secondary);
+    font-size: 10px;
+    white-space: pre-line;
+    line-height: 1.5;
+  }
+  .quote-preview .quotation-totals .totals {
+    flex-shrink: 0;
+    text-align: right;
+    font-size: 13px;
+  }
+  .quote-preview .quotation-totals .totals p { margin: 3px 0; }
+  .quote-preview .quotation-totals .totals .grand-total {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--secondary);
+  }
+  .quote-preview .deposit-section { margin-top: 20px; }
+  .quote-preview .deposit-section h4 {
+    font-size: 11px;
+    color: var(--secondary);
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .quote-preview .deposit-section table {
+    width: 80%;
+    border-collapse: collapse;
+  }
+  .quote-preview .deposit-section th {
+    background: var(--secondary);
+    color: white;
+    padding: 6px 8px;
     text-align: left;
   }
-  .quote-preview td {
-    border: 1px solid #dee2e6;
-    padding: 8px;
-    font-size: 12px;
+  .quote-preview .deposit-section td {
+    padding: 5px 8px;
+    border-bottom: 1px solid #ddd;
   }
-  .quote-preview .qp-totals {
+  .quote-preview .deposit-section .pool-50 { color: #00B3B8; font-weight: 600; }
+  .quote-preview .deposit-section .pool-100 { color: #6f42c1; font-weight: 600; }
+  .quote-preview .deposit-section tfoot td {
     text-align: right;
-    font-size: 14px;
+    font-weight: 600;
   }
-  .quote-preview .qp-totals .row {
+  .quote-preview .salesperson-section {
+    margin-top: 20px;
     display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    padding: 4px 0;
+    justify-content: space-between;
+    font-size: 9px;
   }
-  .quote-preview .qp-totals .row.grand {
-    border-top: 2px solid #2a5298;
-    padding-top: 8px;
-    margin-top: 8px;
-    font-size: 18px;
-    font-weight: 700;
-    color: #1e3c72;
-  }
-  .quote-preview .qp-totals .label { color: #6c757d; min-width: 120px; text-align: right; }
-  .quote-preview .qp-totals .value { min-width: 100px; text-align: right; }
+  .quote-preview .salesperson-section p { margin-bottom: 3px; }
+  .quote-preview .salesperson-section .right { text-align: right; }
 
   /* ========== Loading / Empty ========== */
   .loading, .empty {
@@ -627,63 +713,161 @@
     </div>
   </div>
 
-  <!-- ========== Preview Modal ========== -->
+  <!-- ========== Quotation Preview Modal (Squirrel Designer 风格) ========== -->
   <div v-if="previewQuote" class="modal-mask" @click.self="closePreview">
     <div class="modal">
       <div class="modal-header">
-        <h3>报价单预览 — {{ previewQuote.projNo }}</h3>
+        <h3>📄 Quotation Preview — {{ previewQuote.projNo || previewQuote.id }}</h3>
         <button class="modal-close" @click="closePreview">✕</button>
       </div>
       <div class="modal-body">
         <div class="quote-preview" id="quote-print-area">
-          <div class="qp-header">
-            <h1>🏠 Squirrel Designer 全屋定制</h1>
-            <div class="proj-no">工程单号: <strong>{{ previewQuote.projNo }}</strong></div>
+          <!-- ========== Header: Logo + Customer Info ========== -->
+          <div class="quotation-header">
+            <div class="quotation-info">
+              <div class="quotation-title">QUOTATION</div>
+              <div class="row"><strong>Date:</strong> <span>{{ formatDate(previewQuote.date) }}</span></div>
+              <div class="row" v-if="previewQuote.projNo"><strong>Proj No:</strong> <span>{{ previewQuote.projNo }}</span></div>
+              <div class="row"><strong>Customer Name:</strong> <span>{{ previewQuote.customerName || '-' }}</span></div>
+              <div class="row"><strong>Customer IC No:</strong> <span>{{ previewQuote.customerIC || '-' }}</span></div>
+              <div class="row"><strong>Customer Contact:</strong> <span>{{ previewQuote.customerContact || '-' }}</span></div>
+              <div class="row"><strong>Customer Address:</strong> <span>{{ previewQuote.customerAddress || '-' }}</span></div>
+            </div>
+            <div class="quotation-logo">
+              <img src="https://ongsami-create.github.io/squirreldesigner/logo-new.png" alt="Squirrel Designer" onerror="this.style.display='none';">
+              <div class="company-name">VIDI FURNITURE SDN BHD 502683P</div>
+              <p>104 TO 110 JALAN SRI SULONG 1<br>
+              TAMAN INDUSTRI SRI SULONG<br>
+              83500 PARIT SULONG, JOHOR<br>
+              Tel: +6074101558</p>
+            </div>
           </div>
-          <div class="qp-info">
-            <div class="field"><div class="label">客户姓名:</div><div class="value">{{ previewQuote.customerName }}</div></div>
-            <div class="field"><div class="label">身份证:</div><div class="value">{{ previewQuote.customerIC || '-' }}</div></div>
-            <div class="field"><div class="label">联系电话:</div><div class="value">{{ previewQuote.customerContact || '-' }}</div></div>
-            <div class="field"><div class="label">客户地址:</div><div class="value">{{ previewQuote.customerAddress || '-' }}</div></div>
-            <div class="field"><div class="label">业务员:</div><div class="value">{{ previewQuote.salesperson }}</div></div>
-            <div class="field"><div class="label">设计师:</div><div class="value">{{ previewQuote.designerName || '-' }}</div></div>
-            <div class="field"><div class="label">量尺师:</div><div class="value">{{ previewQuote.measurementEngineer || '-' }}</div></div>
-            <div class="field"><div class="label">报价日期:</div><div class="value">{{ formatDate(previewQuote.date) }}</div></div>
-          </div>
-          <table v-if="previewQuote.items && previewQuote.items.length">
+
+          <!-- ========== Items Table (按 area 分组) ========== -->
+          <table class="quotation-table">
             <thead>
               <tr>
-                <th>#</th>
-                <th>项目</th>
-                <th>规格</th>
-                <th style="text-align:right">数量</th>
-                <th style="text-align:right">单价 (RM)</th>
-                <th style="text-align:right">小计 (RM)</th>
+                <th style="width:30px;">No</th>
+                <th style="width:100px;">Area</th>
+                <th style="width:80px;">Item</th>
+                <th>Description</th>
+                <th style="width:70px;">Dimension</th>
+                <th style="width:50px;">Value</th>
+                <th style="width:30px;">Qty</th>
+                <th style="width:70px;">Total</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(item, idx) in previewQuote.items" :key="idx">
-                <td>{{ idx + 1 }}</td>
-                <td>{{ item.name || item.productName || item.description }}</td>
-                <td>{{ item.spec || item.specification || '' }}</td>
-                <td style="text-align:right">{{ item.qty || item.quantity || 1 }}</td>
-                <td style="text-align:right">{{ formatMoney(item.price || item.unitPrice) }}</td>
-                <td style="text-align:right">{{ formatMoney(item.subtotal || (item.price * item.qty) || 0) }}</td>
+              <template v-for="(group, area) in groupedItems(previewQuote)" :key="area">
+                <tr v-for="(item, idx) in group.items" :key="item.id || idx">
+                  <td>{{ group.startNo + idx }}</td>
+                  <td><strong>{{ area }}</strong></td>
+                  <td>{{ item.itemB || item.name || item.productName || '-' }}</td>
+                  <td>
+                    <span v-html="formatItemDescription(item)"></span>
+                    <div v-if="item.noteA" class="remarks-cell">Note A: {{ item.noteA }}</div>
+                    <div v-if="item.noteB" class="remarks-cell">Note B: {{ item.noteB }}</div>
+                    <div v-if="item.remarks" class="remarks-cell">Remarks: {{ item.remarks }}</div>
+                  </td>
+                  <td class="dimension">{{ item.w || 0 }}×{{ item.h || 0 }}×{{ item.d || 0 }}</td>
+                  <td class="value">{{ formatNumber(item.value, 4) }}</td>
+                  <td class="qty">{{ item.qty || item.quantity || 1 }}</td>
+                  <td class="total">RM {{ formatMoney(item.total || item.subtotal || 0) }}</td>
+                </tr>
+                <tr class="area-subtotal">
+                  <td colspan="7" class="label">{{ area }} SUBTOTAL:</td>
+                  <td>RM {{ formatMoney(group.subtotal) }}</td>
+                </tr>
+              </template>
+
+              <!-- ========== Fees ========== -->
+              <tr v-if="previewQuote.fees && (previewQuote.fees.delivery || previewQuote.fees.install || previewQuote.fees.waste)">
+                <td colspan="7">
+                  <span v-if="previewQuote.fees.delivery">Remote Delivery Fee</span>
+                  <span v-else-if="previewQuote.fees.install">Extra Installation Fee</span>
+                  <span v-else-if="previewQuote.fees.waste">Waste Removal Fee</span>
+                </td>
+                <td>
+                  RM {{
+                    formatMoney(
+                      (previewQuote.fees.delivery || 0) +
+                      (previewQuote.fees.install || 0) +
+                      (previewQuote.fees.waste || 0)
+                    )
+                  }}
+                </td>
+              </tr>
+              <tr v-for="(fee, idx) in (previewQuote.customFees || []).filter(f => f.enabled && f.amount > 0)" :key="'fee-' + idx">
+                <td colspan="7">{{ fee.name }}</td>
+                <td>RM {{ formatMoney(fee.amount) }}</td>
               </tr>
             </tbody>
           </table>
-          <div class="qp-totals">
-            <div class="row" v-if="previewQuote.discount">
-              <div class="label">折扣:</div>
-              <div class="value">- RM {{ formatMoney(previewQuote.discount) }}</div>
+
+          <!-- ========== Totals + Additional Remarks ========== -->
+          <div class="quotation-totals">
+            <div class="remarks-box" v-if="previewQuote.feeRemarks">
+              <strong>Additional Remarks (附加备注):</strong><br>{{ previewQuote.feeRemarks }}
             </div>
-            <div class="row grand">
-              <div class="label">总计:</div>
-              <div class="value">RM {{ formatMoney(previewQuote.total) }}</div>
+            <div v-else style="flex:1;"></div>
+            <div class="totals">
+              <p>Subtotal: RM {{ formatMoney(previewQuote.subtotal || computeSubtotal(previewQuote)) }}</p>
+              <p v-if="previewQuote.discount > 0">Discount: -RM {{ formatMoney(previewQuote.discount) }}</p>
+              <p class="grand-total">TOTAL: RM {{ formatMoney(previewQuote.total) }}</p>
             </div>
-            <div class="row" v-if="(previewQuote.depositRecords || []).length">
-              <div class="label">已付定金:</div>
-              <div class="value" style="color:#28a745">RM {{ formatMoney(totalDepositOf(previewQuote)) }}</div>
+          </div>
+
+          <!-- ========== Deposit Records ========== -->
+          <div class="deposit-section" v-if="depositRecordsData(previewQuote).length">
+            <h4>Deposit Records</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th style="text-align:center;">Pool</th>
+                  <th>Date</th>
+                  <th>Receipt No</th>
+                  <th style="text-align:right;">Amount Received</th>
+                  <th style="text-align:right;">Balance Due</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(d, idx) in depositRecordsData(previewQuote)" :key="idx">
+                  <td :class="d.pool === '100' ? 'pool-100' : 'pool-50'" style="text-align:center;">{{ d.pool === '100' ? '100%' : '50%' }}</td>
+                  <td>{{ d.date || '-' }}</td>
+                  <td>{{ d.receiptNo || d.receipt || '-' }}</td>
+                  <td style="text-align:right;">RM {{ formatMoney(d.amount) }}</td>
+                  <td style="text-align:right;">RM {{ formatMoney(d.balanceDue) }}</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="3" class="pool-50">50% Pool Subtotal:</td>
+                  <td class="pool-50">RM {{ formatMoney(poolSubtotal(previewQuote, '50')) }}</td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td colspan="3" class="pool-100">100% Pool Subtotal:</td>
+                  <td class="pool-100">RM {{ formatMoney(poolSubtotal(previewQuote, '100')) }}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <!-- ========== Salesperson + Payment Section ========== -->
+          <div class="salesperson-section">
+            <div>
+              <p v-if="previewQuote.salesperson"><strong>Salesperson Name:</strong> {{ previewQuote.salesperson }}</p>
+              <p v-if="previewQuote.designerName"><strong>Designer Name:</strong> {{ previewQuote.designerName }}</p>
+              <p v-if="previewQuote.salespersonContact"><strong>Salesperson Contact:</strong> {{ previewQuote.salespersonContact }}</p>
+              <p v-if="previewQuote.subSalesperson"><strong>Sub Salesperson:</strong> {{ previewQuote.subSalesperson }}</p>
+              <p v-if="previewQuote.measurementEngineer"><strong>Measurement Engineer:</strong> {{ previewQuote.measurementEngineer }}</p>
+              <p style="margin-top:8px;">50% Deposit, 50% before delivery</p>
+              <p>Quotation valid for 14 days | Deposit are not refundable</p>
+            </div>
+            <div class="right">
+              <p><strong>Payment to: VIDI FURNITURE SDN BHD</strong></p>
+              <p><strong>PUBLIC BANK Account no.: 3105442218</strong></p>
             </div>
           </div>
         </div>
@@ -908,48 +1092,418 @@ createApp({
       return (q.depositRecords || []).reduce((s, d) => s + (d.amount || 0), 0);
     }
 
+    // ============ Quotation Preview Helpers (Squirrel Designer 格式) ============
+    function groupedItems(q) {
+      // 按 area 分组, 保持 Squirrel Designer 的 AREA_ORDER
+      const AREA_ORDER = ['LIVING ROOM','DINING ROOM','KITCHEN','DRY KITCHEN','WET KITCHEN','MASTER BEDROOM','BEDROOM 2','BEDROOM 3','BEDROOM 4','STUDY ROOM','FAMILY HALL','STORE','BALCONY','OTHERS'];
+      const grouped = {};
+      (q.items || []).forEach(item => {
+        const area = item.area || 'OTHERS';
+        if (!grouped[area]) grouped[area] = { items: [], subtotal: 0 };
+        grouped[area].items.push(item);
+        grouped[area].subtotal += (item.total || item.subtotal || 0);
+      });
+      // 按 AREA_ORDER 排序
+      const result = {};
+      AREA_ORDER.forEach(area => { if (grouped[area]) result[area] = grouped[area]; });
+      // 兜底：未在 AREA_ORDER 里的
+      Object.keys(grouped).forEach(area => { if (!result[area]) result[area] = grouped[area]; });
+
+      // 加 startNo
+      let no = 1;
+      Object.keys(result).forEach(area => {
+        result[area].startNo = no;
+        no += result[area].items.length;
+      });
+      return result;
+    }
+
+    function formatItemDescription(item) {
+      let parts = [];
+      if (item.description) parts.push(item.description);
+      else if (item.spec) parts.push(item.spec);
+      if (item.specification) parts.push(item.specification);
+      return parts.length > 0 ? parts.join(' / ') : '-';
+    }
+
+    function formatNumber(n, decimals = 2) {
+      return (n || 0).toLocaleString('en-MY', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    }
+
+    function computeSubtotal(q) {
+      return (q.items || []).reduce((sum, it) => sum + (it.total || it.subtotal || 0), 0);
+    }
+
+    function depositRecordsData(q) {
+      // 返回带 balanceDue 的 deposit records 列表
+      const records = (q.depositRecords || []).filter(d => d.date || d.receiptNo || d.receipt || (d.amount || 0) > 0);
+      let totalPaid = 0;
+      const total = q.total || 0;
+      return records.map(d => {
+        totalPaid += d.amount || 0;
+        return { ...d, balanceDue: total - totalPaid };
+      });
+    }
+
+    function poolSubtotal(q, pool) {
+      return (q.depositRecords || [])
+        .filter(d => (d.pool || '50') === pool)
+        .reduce((sum, d) => sum + (d.amount || 0), 0);
+    }
+
     // ============ Print / PDF / Excel ============
     function printQuote() {
       window.print();
     }
-    async function exportPreviewPDF() {
-      try {
-        const area = document.getElementById('quote-print-area');
-        const canvas = await html2canvas(area, { scale: 2, useCORS: true });
-        const imgData = canvas.toDataURL('image/png');
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`报价单_${previewQuote.value.projNo}.pdf`);
-      } catch (e) {
-        alert('PDF 导出失败: ' + e.message);
-        printQuote(); // fallback
+
+    // PDF 导出: 用 printWindow 弹出可保存为 PDF 的新页面 (Squirrel Designer 风格)
+    function exportPreviewPDF() {
+      const q = previewQuote.value;
+      if (!q) return;
+
+      // Build items HTML (按 area 分组)
+      const groups = groupedItems(q);
+      let itemsHtml = '';
+      let no = 1;
+      Object.keys(groups).forEach(area => {
+        const g = groups[area];
+        g.items.forEach(item => {
+          const desc = item.description || '-';
+          const noteA = item.noteA ? `<br><span style="font-size:9px;color:#888;">Note A: ${item.noteA}</span>` : '';
+          const noteB = item.noteB ? `<br><span style="font-size:9px;color:#888;">Note B: ${item.noteB}</span>` : '';
+          const remarks = item.remarks ? `<br><span style="font-size:9px;color:#666;white-space:pre-line;display:inline-block;">Remarks: ${item.remarks}</span>` : '';
+          itemsHtml += `<tr>
+            <td>${no}</td>
+            <td><strong>${area}</strong></td>
+            <td>${item.itemB || item.name || item.productName || '-'}</td>
+            <td style="vertical-align: top;">${desc}${noteA}${noteB}${remarks}</td>
+            <td>${item.w || 0}×${item.h || 0}×${item.d || 0}</td>
+            <td>${formatNumber(item.value, 2)}</td>
+            <td>${item.qty || item.quantity || 1}</td>
+            <td>RM ${formatMoney(item.total || item.subtotal || 0)}</td>
+          </tr>`;
+          no++;
+        });
+        itemsHtml += `<tr style="background: #6B6B5D; color: white; font-weight: bold;">
+          <td colspan="7" style="text-align: right;">${area} SUBTOTAL:</td>
+          <td>RM ${formatMoney(g.subtotal)}</td>
+        </tr>`;
+      });
+
+      // Fees
+      if (q.fees) {
+        const delivery = q.fees.delivery || 0;
+        const install = q.fees.install || 0;
+        const waste = q.fees.waste || 0;
+        if (delivery > 0) itemsHtml += `<tr><td colspan="7">Remote Delivery Fee</td><td>RM ${formatMoney(delivery)}</td></tr>`;
+        if (install > 0) itemsHtml += `<tr><td colspan="7">Extra Installation Fee</td><td>RM ${formatMoney(install)}</td></tr>`;
+        if (waste > 0) itemsHtml += `<tr><td colspan="7">Waste Removal Fee</td><td>RM ${formatMoney(waste)}</td></tr>`;
       }
+      (q.customFees || []).filter(f => f.enabled && f.amount > 0).forEach(fee => {
+        itemsHtml += `<tr><td colspan="7">${fee.name}</td><td>RM ${formatMoney(fee.amount)}</td></tr>`;
+      });
+
+      // Deposit Records HTML
+      const depositList = depositRecordsData(q);
+      let pool50Sum = poolSubtotal(q, '50');
+      let pool100Sum = poolSubtotal(q, '100');
+      let depositTableHtml = '';
+      if (depositList.length) {
+        depositTableHtml = `
+          <div style="margin-top:20px;">
+            <h4 style="font-size:11px;color:#4A4A3D;margin-bottom:8px;">Deposit Records</h4>
+            <table style="width:80%;border-collapse:collapse;">
+              <thead>
+                <tr style="background:#4A4A3D;color:white;">
+                  <th style="padding:6px 8px;text-align:center;">Pool</th>
+                  <th style="padding:6px 8px;text-align:left;">Date</th>
+                  <th style="padding:6px 8px;text-align:left;">Receipt No</th>
+                  <th style="padding:6px 8px;text-align:right;">Amount Received</th>
+                  <th style="padding:6px 8px;text-align:right;">Balance Due</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${depositList.map(d => {
+                  const poolColor = d.pool === '100' ? '#6f42c1' : '#00B3B8';
+                  const poolLabel = d.pool === '100' ? '100%' : '50%';
+                  return `<tr>
+                    <td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:center;color:${poolColor};font-weight:600;">${poolLabel}</td>
+                    <td style="padding:5px 8px;border-bottom:1px solid #ddd;">${d.date || '-'}</td>
+                    <td style="padding:5px 8px;border-bottom:1px solid #ddd;">${d.receiptNo || d.receipt || '-'}</td>
+                    <td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:right;">RM ${formatMoney(d.amount)}</td>
+                    <td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:right;">RM ${formatMoney(d.balanceDue)}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+              <tfoot>
+                <tr><td colspan="3" style="padding:5px 8px;text-align:right;color:#00B3B8;font-weight:600;">50% Pool Subtotal:</td><td style="padding:5px 8px;text-align:right;color:#00B3B8;font-weight:600;">RM ${formatMoney(pool50Sum)}</td><td></td></tr>
+                <tr><td colspan="3" style="padding:5px 8px;text-align:right;color:#6f42c1;font-weight:600;">100% Pool Subtotal:</td><td style="padding:5px 8px;text-align:right;color:#6f42c1;font-weight:600;">RM ${formatMoney(pool100Sum)}</td><td></td></tr>
+              </tfoot>
+            </table>
+          </div>
+        `;
+      }
+
+      const projNo = q.projNo || '';
+      const customerName = q.customerName || '';
+      const date = q.date || '';
+      const address = (q.customerAddress || '').substring(0, 20).replace(/[^a-zA-Z0-9]/g, '_');
+      const pdfFileName = `${projNo || 'NoProjNo'}_${customerName || 'NoName'}_${address || 'NoAddress'}_${date || ''}`;
+
+      const subtotal = q.subtotal || computeSubtotal(q);
+      const discount = q.discount || 0;
+
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+<!DOCTYPE html>
+<html>
+<head>
+  <title>${pdfFileName}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 11px; padding: 15px; color: #2c3e50; }
+    h1 { font-size: 24px; color: #6B6B5D; margin-bottom: 10px; font-weight: bold; text-align: left; }
+    .header { display: flex; justify-content: space-between; margin-bottom: 15px; border-bottom: 2px solid #6B6B5D; padding-bottom: 10px; }
+    .customer-info p { margin-bottom: 2px; line-height: 1.3; display: flex; }
+    .customer-info strong { color: #6B6B5D; min-width: 140px; }
+    .logo-info { text-align: right; }
+    .logo-info img { max-height: 60px; margin-bottom: 5px; }
+    .logo-info .company-name { font-size: 11px; font-weight: bold; color: #333; line-height: 1.3; }
+    .logo-info p { font-size: 9px; color: #666; line-height: 1.3; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10px; }
+    th { background: #6B6B5D; color: white; padding: 6px 4px; text-align: left; }
+    td { padding: 5px 4px; border-bottom: 1px solid #ddd; }
+    .totals { text-align: right; margin-top: 15px; font-size: 13px; }
+    .totals p { margin: 3px 0; }
+    .grand-total { font-size: 16px; font-weight: bold; color: #6B6B5D; }
+    .salesperson-section { margin-top: 20px; display: flex; justify-content: space-between; font-size: 9px; }
+    .salesperson-section p { margin-bottom: 3px; }
+    .salesperson-section .right { text-align: right; }
+    @media print {
+      body { padding: 10px; }
     }
+  </style>
+</head>
+<body>
+  <h1>QUOTATION</h1>
+  <div class="header">
+    <div class="customer-info">
+      <p><strong>Date:</strong> <span>${date}</span></p>
+      ${projNo ? `<p><strong>Proj No:</strong> <span>${projNo}</span></p>` : ''}
+      <p><strong>Customer Name:</strong> <span>${customerName}</span></p>
+      <p><strong>Customer IC No:</strong> <span>${q.customerIC || ''}</span></p>
+      <p><strong>Customer Contact:</strong> <span>${q.customerContact || ''}</span></p>
+      <p><strong>Customer Address:</strong> <span>${q.customerAddress || ''}</span></p>
+    </div>
+    <div class="logo-info">
+      <img src="https://ongsami-create.github.io/squirreldesigner/logo-new.png" alt="Squirrel Designer" onerror="this.style.display='none';">
+      <p class="company-name">VIDI FURNITURE SDN BHD 502683P</p>
+      <p>104 TO 110 JALAN SRI SULONG 1<br>
+      TAMAN INDUSTRI SRI SULONG<br>
+      83500 PARIT SULONG, JOHOR<br>
+      Tel: +6074101558</p>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:30px;">No</th>
+        <th style="width:100px;">Area</th>
+        <th style="width:80px;">Item</th>
+        <th>Description</th>
+        <th style="width:70px;">Dimension</th>
+        <th style="width:50px;">Value</th>
+        <th style="width:30px;">Qty</th>
+        <th style="width:70px;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemsHtml}
+    </tbody>
+  </table>
+
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-top:15px;">
+    ${q.feeRemarks ? `<div style="flex:1;padding:8px 10px;background:#f9f9f9;border-left:3px solid #6B6B5D;font-size:10px;white-space:pre-line;line-height:1.5;"><strong>Additional Remarks (附加备注):</strong><br>${q.feeRemarks}</div>` : '<div style="flex:1;"></div>'}
+    <div class="totals" style="flex-shrink:0;">
+      <p>Subtotal: RM ${formatMoney(subtotal)}</p>
+      ${discount > 0 ? `<p>Discount: -RM ${formatMoney(discount)}</p>` : ''}
+      <p class="grand-total">TOTAL: RM ${formatMoney(q.total)}</p>
+    </div>
+  </div>
+
+  ${depositTableHtml}
+
+  <div class="salesperson-section">
+    <div>
+      ${q.salesperson ? `<p><strong>Salesperson Name:</strong> ${q.salesperson}</p>` : ''}
+      ${q.designerName ? `<p><strong>Designer Name:</strong> ${q.designerName}</p>` : ''}
+      ${q.salespersonContact ? `<p><strong>Salesperson Contact:</strong> ${q.salespersonContact}</p>` : ''}
+      ${q.subSalesperson ? `<p><strong>Sub Salesperson:</strong> ${q.subSalesperson}</p>` : ''}
+      ${q.measurementEngineer ? `<p><strong>Measurement Engineer:</strong> ${q.measurementEngineer}</p>` : ''}
+      <p style="margin-top:8px;">50% Deposit, 50% before delivery</p>
+      <p>Quotation valid for 14 days | Deposit are not refundable</p>
+    </div>
+    <div class="right">
+      <p><strong>Payment to: VIDI FURNITURE SDN BHD</strong></p>
+      <p><strong>PUBLIC BANK Account no.: 3105442218</strong></p>
+    </div>
+  </div>
+</body>
+</html>
+      `);
+      printWindow.document.close();
+      setTimeout(() => { printWindow.print(); }, 500);
+    }
+
+    // Excel 导出: AOA 格式 + 完整合同条款 (Squirrel Designer 风格)
     function exportPreviewExcel() {
       const q = previewQuote.value;
-      const rows = [];
-      (q.items || []).forEach((it, i) => {
-        rows.push({
-          '序号': i + 1,
-          '项目': it.name || it.productName || '',
-          '规格': it.spec || '',
-          '数量': it.qty || 1,
-          '单价 (RM)': it.price || 0,
-          '小计 (RM)': it.subtotal || (it.price * it.qty) || 0
+      if (!q) return;
+      const groups = groupedItems(q);
+      const subtotal = q.subtotal || computeSubtotal(q);
+      const discount = q.discount || 0;
+      const grandTotal = q.total || 0;
+
+      const data = [];
+
+      // Header
+      data.push(['', '', '', '', '', '', '', 'Quotation', '', '', '']);
+      data.push(['', '', '', '', '', '', '', 'Attn:', q.customerName || '', '', '']);
+      data.push(['', '', '', '', '', '', '', 'IC No:', q.customerIC || '', '', '']);
+      data.push(['', '', '', '', '', '', '', 'Address:', q.customerAddress || '', '', '']);
+      data.push(['Squirrel Designer', '', '', '', '', '', '', 'Contact:', q.customerContact || '', '', '']);
+      data.push(['', '', '', '', '', '', '', 'Date:', q.date || '', '', '']);
+      data.push(['', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['RE: Quotation of Customize', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['We refer to the above and are pleased to submit our quotation as below for your kind consideration:-', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['', '', '', '', '', '', '', '', '', '', '']);
+
+      // Table Header
+      data.push(['NO', 'PIC / AREA', 'DESCRIPTION', '', '', 'W', 'H', 'D', 'Value', 'UNIT PRICE', 'S. TOTAL']);
+      data.push(['', '', '', '', '', '宽度', '高度', '深度', '', '', '']);
+      data.push(['', '', '', '', '', '', '', '', '', '', '']);
+
+      // Items by area
+      let no = 1;
+      Object.keys(groups).forEach(area => {
+        const g = groups[area];
+        g.items.forEach((item, i) => {
+          let descParts = [];
+          if (item.description) descParts.push(item.description);
+          if (item.remarks) descParts.push(item.remarks);
+          const desc = descParts.join(' | ') || '';
+          if (i === 0) {
+            data.push([no, area, desc, '', '',
+              item.w || '', item.h || '', item.d || '',
+              formatNumber(item.value, 3), formatNumber(item.unitPrice, 2), formatNumber(item.total || item.subtotal || 0, 2)]);
+          } else {
+            data.push(['', '', desc, '', '',
+              item.w || '', item.h || '', item.d || '',
+              formatNumber(item.value, 3), formatNumber(item.unitPrice, 2), formatNumber(item.total || item.subtotal || 0, 2)]);
+          }
         });
+        no++;
+        data.push(['', '', '', '', '', '', '', '', '', '', '']);
       });
-      rows.push({});
-      rows.push({ '序号': '', '项目': '', '规格': '', '数量': '', '单价 (RM)': '总计:', '小计 (RM)': q.total || 0 });
-      const ws = XLSX.utils.json_to_sheet(rows);
+
+      // Fees
+      if (q.fees) {
+        if (q.fees.delivery > 0) data.push(['', '', '', '', '', '', '', '', '', 'Remote Delivery Fee', formatMoney(q.fees.delivery)]);
+        if (q.fees.install > 0) data.push(['', '', '', '', '', '', '', '', '', 'Extra Installation Fee', formatMoney(q.fees.install)]);
+        if (q.fees.waste > 0) data.push(['', '', '', '', '', '', '', '', '', 'Waste Removal Fee', formatMoney(q.fees.waste)]);
+      }
+      (q.customFees || []).filter(f => f.enabled && f.amount > 0).forEach(fee => {
+        data.push(['', '', '', '', '', '', '', '', '', fee.name, formatMoney(fee.amount)]);
+      });
+      data.push(['', '', '', '', '', '', '', '', '', '', '']);
+
+      // Totals
+      data.push(['', '', '', '', '', '', '', '', 'AMOUNT', '', formatMoney(grandTotal)]);
+      data.push(['', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['', '', '', '', '', '', '', '', 'TOTAL', '', formatMoney(grandTotal)]);
+      data.push(['', '', '', '', '', '', '', '', '', '', '']);
+
+      // Deposit Records
+      const depositList = depositRecordsData(q);
+      if (depositList.length) {
+        data.push(['Deposit Records', '', '', '', '', '', '', '', '', '', '']);
+        data.push(['Date', 'Receipt No', 'Amount Received', 'Balance Due', '', '', '', '', '', '', '']);
+        depositList.forEach(d => {
+          data.push([d.date || '-', d.receiptNo || d.receipt || '-', `RM ${formatMoney(d.amount)}`, `RM ${formatMoney(d.balanceDue)}`, '', '', '', '', '', '', '']);
+        });
+        data.push(['', '', '', '', '', '', '', '', '', '', '']);
+      }
+
+      // Salesperson
+      if (q.salesperson) data.push(['Salesperson Name:', q.salesperson, '', '', '', '', '', '', '', '', '']);
+      if (q.salespersonContact) data.push(['Salesperson Contact:', q.salespersonContact, '', '', '', '', '', '', '', '', '']);
+      data.push(['', '', '', '', '', '', '', '', '', '', '']);
+
+      // Payment Section
+      data.push(['50% Deposit, 50% before delivery', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['Quotation valid for 14 days | Deposit are not refundable', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['Payment to: VIDI FURNITURE SDN BHD', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['PUBLIC BANK Account no.: 3105442218', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['', '', '', '', '', '', '', '', '', '', '']);
+
+      // Legal Notes A
+      data.push(['A. Notes', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['1. Please verify the order details. The products under this Order are custom-made.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['2. The delivery period shall be 60 days, and the installation and replacement period for panels shall not exceed 14 days. The above periods shall commence on the day following the full payment of production fees. Fees for special materials and craftsmanship shall be calculated separately.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['3. The cabinet body shall be made of multi-layer solid wood, and the cabinet doors shall be made of oriented strand board (OSB). For detailed material specifications, the Design Documents shall prevail. Hardware fittings shall be standard-configured with HIGOLD and DTC products. In case of product damage caused by improper use by the Buyer, the relevant liabilities shall be borne by the Buyer itself.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['4. Both Party A and Party B confirm that the maximum number of free revisions for the design services commissioned hereunder (including specific types such as graphic design, product renderings, and video storyboards) shall be 3 times. The scope of free revisions shall be limited to adjustment opinions that are consistent with the original design requirements and proposed based on the initial draft and the first two revised drafts. It does not include new design content such as requirement changes, style reconstruction, or replacement of core elements.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['', '', '', '', '', '', '', '', '', '', '']);
+
+      // Legal B
+      data.push(['B. Deposit, Payment, and Cancellation Policy', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['1. Intent Deposit: After the Buyer confirms the price through consultation with the salesperson, the Buyer shall pay an intent deposit of at least 10%. Only then will the design proposal be provided. The deposit shall be paid upon confirmation of the design proposal.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['1.1 If the Buyer cancels the Order, the design fee shall be deducted, and the balance of the intent deposit shall be refunded to the Buyer.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['2. Deposit: The Buyer shall pay a deposit of RM [Amount] (equivalent to 40% of the total contract price) to the Seller on the date of signing this Contract and confirming the design drawings. This deposit is intended to ensure the Buyer\'s performance of the purchase obligations hereunder.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['Deposit Treatment: The deposit shall be fully credited against the balance payment upon successful delivery, installation, and acceptance of the furniture.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['2.1 Cancellation by Buyer Without Cause:', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['Custom Furniture Cancellation: Given that custom furniture is manufactured in accordance with the Buyer\'s specific requirements and specifications, once the Seller commences design work or material procurement (usually within 3 working days after the deposit is paid), the Buyer shall have no right to claim a refund of the paid deposit.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['Non-Custom Furniture Cancellation:', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['- If the Buyer cancels the Order within 15 working days after signing the Contract, the Seller shall deduct 10% of the deposit as an administrative handling fee, and refund the balance to the Buyer.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['- If the cancellation is made after more than 15 working days, the Seller shall be entitled to forfeit the entire deposit.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['', '', '', '', '', '', '', '', '', '', '']);
+
+      // Legal C
+      data.push(['C. Specifications and Design Confirmation for Custom Furniture', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['1. Confirmation of Specifications: Buyer must, within 15 working days upon receipt of the Design Documents, finally confirm and approve all specifications, materials, and dimensions in writing.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['2. Materials and Color: Due to natural materials and lighting differences, actual color and texture may differ reasonably from samples.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['3. Requests for Design Changes: Buyer may submit written application after approval. Any change may only be implemented after both parties reach written agreement on new costs and time limit.', '', '', '', '', '', '', '', '', '', '']);
+      data.push(['', '', '', '', '', '', '', '', '', '', '']);
+
+      // Additional Remarks
+      if (q.feeRemarks) {
+        data.push(['Additional Remarks:', q.feeRemarks, '', '', '', '', '', '', '', '', '']);
+      }
+
+      // Create workbook
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      ws['!cols'] = [
+        {wch: 5},   // A - NO
+        {wch: 20},  // B - AREA
+        {wch: 50},  // C - DESCRIPTION
+        {wch: 5},   // D
+        {wch: 5},   // E
+        {wch: 10},  // F - W
+        {wch: 10},  // G - H
+        {wch: 10},  // H - D
+        {wch: 10},  // I - Value
+        {wch: 15},  // J - UNIT PRICE
+        {wch: 15}   // K - S.TOTAL
+      ];
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '报价单');
-      XLSX.writeFile(wb, `报价单_${q.projNo}.xlsx`);
+      XLSX.utils.book_append_sheet(wb, ws, 'Quotation');
+      XLSX.writeFile(wb, `Quotation_${q.customerName || ''}_${q.date || ''}.xlsx`);
     }
+
     function exportToExcel() {
-      // Export current filtered list
+      // Export current filtered list (财务列表)
       const rows = filteredQuotes.value.map(q => ({
         '创建日期': formatDate(q.date),
         '工程单号': q.projNo,
@@ -1011,7 +1565,10 @@ createApp({
       filters, activeFilter, filterOptions, filterPopoverStyle,
       toggleFilter, toggleFilterValue, toggleAllFilter, applyFilter,
       onSearchInput,
-      previewQuote, openPreview, closePreview, totalDepositOf,
+      previewQuote, openPreview, closePreview,
+      // Quotation helpers (Squirrel Designer 风格)
+      groupedItems, formatItemDescription, formatNumber, computeSubtotal,
+      depositRecordsData, poolSubtotal,
       printQuote, exportPreviewPDF, exportPreviewExcel, exportToExcel,
       statusLabel, statusBadgeClass, formatMoney, formatDate,
       loadData
