@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Squirrel Finance - 财务订单查询系统</title>
+<!-- Vue 3 -->
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<!-- SheetJS for Excel 导出 -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- html2canvas for PDF -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: #f5f7fa;
+    color: #2c3e50;
+    font-size: 14px;
+  }
+  #app { min-height: 100vh; }
+
+  /* ========== Header ========== */
+  .header {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    color: #fff;
+    padding: 16px 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .header .subtitle {
+    font-size: 12px;
+    opacity: 0.85;
+  }
+
+  /* ========== Toolbar ========== */
+  .toolbar {
+    background: #fff;
+    padding: 12px 24px;
+    border-bottom: 1px solid #e0e6ed;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .search-box {
+    flex: 1;
+    min-width: 280px;
+    position: relative;
+  }
+  .search-box input {
+    width: 100%;
+    padding: 8px 12px 8px 36px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s;
+  }
+  .search-box input:focus {
+    outline: none;
+    border-color: #2a5298;
+  }
+  .search-box::before {
+    content: "🔍";
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.5;
+  }
+  .btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    background: #2a5298;
+    color: #fff;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+  .btn:hover { background: #1e3c72; }
+  .btn:disabled { background: #adb5bd; cursor: not-allowed; }
+  .btn-secondary {
+    background: #fff;
+    color: #2a5298;
+    border: 1px solid #2a5298;
+  }
+  .btn-secondary:hover { background: #f0f4fa; }
+
+  /* ========== KPI Cards ========== */
+  .kpi-row {
+    padding: 16px 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .kpi-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border-left: 4px solid #2a5298;
+  }
+  .kpi-card .label {
+    font-size: 12px;
+    color: #6c757d;
+    margin-bottom: 6px;
+  }
+  .kpi-card .value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #2c3e50;
+  }
+  .kpi-card.green { border-left-color: #28a745; }
+  .kpi-card.orange { border-left-color: #fd7e14; }
+  .kpi-card.purple { border-left-color: #6f42c1; }
+
+  /* ========== Tabs ========== */
+  .tabs {
+    background: #fff;
+    padding: 0 24px;
+    border-bottom: 1px solid #e0e6ed;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 12px 18px;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    color: #6c757d;
+    font-weight: 500;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .tab:hover { color: #2a5298; background: #f8f9fa; }
+  .tab.active {
+    color: #2a5298;
+    border-bottom-color: #2a5298;
+  }
+  .tab .count {
+    display: inline-block;
+    background: #e9ecef;
+    color: #495057;
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-size: 11px;
+    margin-left: 6px;
+  }
+  .tab.active .count {
+    background: #2a5298;
+    color: #fff;
+  }
+
+  /* ========== Table ========== */
+  .table-wrap {
+    background: #fff;
+    margin: 16px 24px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    overflow: hidden;
+  }
+  .table-scroll {
+    overflow-x: auto;
+    max-height: calc(100vh - 360px);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead {
+    position: sticky;
+    top: 0;
+    background: #f8f9fa;
+    z-index: 10;
+  }
+  th {
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+    white-space: nowrap;
+    user-select: none;
+  }
+  th.sortable { cursor: pointer; }
+  th.sortable:hover { background: #e9ecef; }
+  th .sort-arrow {
+    font-size: 10px;
+    margin-left: 4px;
+    opacity: 0.4;
+  }
+  th.sorted .sort-arrow { opacity: 1; color: #2a5298; }
+  th .filter-btn {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 2px 4px;
+    cursor: pointer;
+    opacity: 0.5;
+    font-size: 10px;
+  }
+  th .filter-btn:hover, th .filter-btn.active { opacity: 1; color: #2a5298; }
+
+  tbody tr {
+    border-bottom: 1px solid #f1f3f5;
+    transition: background 0.15s;
+  }
+  tbody tr:hover { background: #f8f9fa; }
+  td {
+    padding: 10px 12px;
+    color: #495057;
+    vertical-align: top;
+  }
+  td.col-amount { text-align: right; font-weight: 600; color: #2a5298; }
+  td.col-actions { white-space: nowrap; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-pending { background: #fff3cd; color: #856404; }
+  .badge-ordered { background: #ffe5d0; color: #d63384; }
+  .badge-completed { background: #d1e7dd; color: #0f5132; }
+  .badge-partial { background: #cfe2ff; color: #084298; }
+
+  .btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    background: #2a5298;
+    color: #fff;
+  }
+  .btn-sm:hover { background: #1e3c72; }
+
+  /* ========== Summary Row ========== */
+  .summary-row {
+    background: #f8f9fa;
+    padding: 12px 24px;
+    border-top: 2px solid #dee2e6;
+    display: flex;
+    gap: 32px;
+    font-size: 14px;
+    color: #495057;
+  }
+  .summary-row .item .label {
+    font-size: 12px;
+    color: #6c757d;
+  }
+  .summary-row .item .value {
+    font-weight: 700;
+    color: #2a5298;
+    font-size: 18px;
+  }
+
+  /* ========== Filter Popover ========== */
+  .filter-popover {
+    position: absolute;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    padding: 12px;
+    min-width: 220px;
+    max-height: 360px;
+    overflow-y: auto;
+    z-index: 50;
+  }
+  .filter-popover h4 {
+    font-size: 12px;
+    color: #6c757d;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .filter-popover label {
+    display: flex;
+    align-items: center;
+    padding: 4px 0;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .filter-popover label:hover { background: #f8f9fa; }
+  .filter-popover input[type=checkbox] { margin-right: 8px; }
+  .filter-popover .actions {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    gap: 8px;
+  }
+  .filter-popover .actions .btn { padding: 4px 10px; font-size: 12px; }
+
+  /* ========== Modal ========== */
+  .modal-mask {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal {
+    background: #fff;
+    border-radius: 8px;
+    max-width: 95vw;
+    max-height: 95vh;
+    width: 900px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .modal-header {
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-header h3 { font-size: 16px; }
+  .modal-body { overflow-y: auto; padding: 0; }
+  .modal-footer {
+    padding: 12px 16px;
+    background: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .modal-close {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+  }
+
+  /* ========== Quote Preview ========== */
+  .quote-preview {
+    padding: 32px;
+    background: #fff;
+    color: #2c3e50;
+  }
+  .quote-preview .qp-header {
+    text-align: center;
+    border-bottom: 2px solid #2a5298;
+    padding-bottom: 16px;
+    margin-bottom: 20px;
+  }
+  .quote-preview .qp-header h1 {
+    font-size: 24px;
+    color: #1e3c72;
+    margin-bottom: 4px;
+  }
+  .quote-preview .qp-header .proj-no {
+    color: #6c757d;
+    font-size: 14px;
+  }
+  .quote-preview .qp-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 24px;
+    margin-bottom: 20px;
+    font-size: 13px;
+  }
+  .quote-preview .qp-info .field { display: flex; }
+  .quote-preview .qp-info .field .label {
+    color: #6c757d;
+    min-width: 80px;
+  }
+  .quote-preview .qp-info .field .value {
+    color: #2c3e50;
+    font-weight: 500;
+  }
+  .quote-preview table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+  }
+  .quote-preview th {
+    background: #2a5298;
+    color: #fff;
+    padding: 8px;
+    font-size: 12px;
+    text-align: left;
+  }
+  .quote-preview td {
+    border: 1px solid #dee2e6;
+    padding: 8px;
+    font-size: 12px;
+  }
+  .quote-preview .qp-totals {
+    text-align: right;
+    font-size: 14px;
+  }
+  .quote-preview .qp-totals .row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 4px 0;
+  }
+  .quote-preview .qp-totals .row.grand {
+    border-top: 2px solid #2a5298;
+    padding-top: 8px;
+    margin-top: 8px;
+    font-size: 18px;
+    font-weight: 700;
+    color: #1e3c72;
+  }
+  .quote-preview .qp-totals .label { color: #6c757d; min-width: 120px; text-align: right; }
+  .quote-preview .qp-totals .value { min-width: 100px; text-align: right; }
+
+  /* ========== Loading / Empty ========== */
+  .loading, .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+  }
+  .loading::before {
+    content: "⏳";
+    font-size: 32px;
+    display: block;
+    margin-bottom: 12px;
+  }
+  .empty::before {
+    content: "📋";
+    font-size: 32px;
+    display: block;
+    margin-bottom: 12px;
+  }
+  .error-banner {
+    background: #f8d7da;
+    color: #721c24;
+    padding: 12px 24px;
+    margin: 16px 24px;
+    border-radius: 6px;
+    border-left: 4px solid #dc3545;
+  }
+
+  /* ========== Print ========== */
+  @media print {
+    body * { visibility: hidden; }
+    .quote-preview, .quote-preview * { visibility: visible; }
+    .quote-preview { position: absolute; left: 0; top: 0; width: 100%; padding: 0; }
+    .modal-mask { background: #fff !important; position: static !important; display: block !important; }
+    .modal { box-shadow: none !important; max-width: 100% !important; max-height: none !important; width: 100% !important; }
+    .modal-header, .modal-footer { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- Header -->
+  <div class="header">
+    <h1>🐿️ Squirrel Finance — 财务订单查询系统</h1>
+    <div class="subtitle">实时同步自 Squirrel Designer 报价系统 · 数据驱动：Google Drive</div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="search-box">
+      <input
+        v-model="searchQuery"
+        @input="onSearchInput"
+        placeholder="搜索客户名 / 工程单号 / 客户电话 / 客户身份证…"
+      />
+    </div>
+    <button class="btn-secondary btn" @click="loadData" :disabled="loading">
+      {{ loading ? '加载中…' : '🔄 刷新数据' }}
+    </button>
+    <button class="btn-secondary btn" @click="exportToExcel" :disabled="loading || filteredQuotes.length === 0">
+      📊 导出 Excel
+    </button>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-row" v-if="!loading && quotes.length > 0">
+    <div class="kpi-card">
+      <div class="label">📋 总单数</div>
+      <div class="value">{{ filteredQuotes.length }}</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="label">💰 总金额 (RM)</div>
+      <div class="value">{{ formatMoney(totalAmount) }}</div>
+    </div>
+    <div class="kpi-card orange">
+      <div class="label">💵 已收定金 (RM)</div>
+      <div class="value">{{ formatMoney(totalDeposit) }}</div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="label">📅 今日新增</div>
+      <div class="value">{{ todayNewCount }}</div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" v-if="!loading && users.length > 0">
+    <div
+      class="tab"
+      :class="{active: activeTab === 'all'}"
+      @click="activeTab = 'all'"
+    >
+      全部 <span class="count">{{ quotes.length }}</span>
+    </div>
+    <div
+      v-for="u in users"
+      :key="u.username"
+      class="tab"
+      :class="{active: activeTab === u.username}"
+      @click="activeTab = u.username"
+    >
+      {{ u.displayName }} <span class="count">{{ u.quoteCount }}</span>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div v-if="errorMsg" class="error-banner">
+    ⚠️ {{ errorMsg }}
+    <button class="btn-sm" style="float:right" @click="loadData">重试</button>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap" v-if="!loading && filteredQuotes.length > 0">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th class="sortable" @click="toggleSort('date')" :class="{sorted: sortKey === 'date'}">
+              创建日期 <span class="sort-arrow">{{ sortArrow('date') }}</span>
+            </th>
+            <th class="sortable" @click="toggleSort('projNo')" :class="{sorted: sortKey === 'projNo'}">
+              工程单号 <span class="sort-arrow">{{ sortArrow('projNo') }}</span>
+            </th>
+            <th class="sortable" @click="toggleSort('customerName')" :class="{sorted: sortKey === 'customerName'}">
+              客户名字 <span class="sort-arrow">{{ sortArrow('customerName') }}</span>
+            </th>
+            <th>客户身份证 <span class="filter-btn" :class="{active: filters.customerIC.length}" @click.stop="toggleFilter('customerIC')">▼</span></th>
+            <th>客户联系号码 <span class="filter-btn" :class="{active: filters.customerContact.length}" @click.stop="toggleFilter('customerContact')">▼</span></th>
+            <th>客户地址</th>
+            <th>业务员</th>
+            <th class="sortable" @click="toggleSort('total')" :class="{sorted: sortKey === 'total'}">
+              总金额 (RM) <span class="sort-arrow">{{ sortArrow('total') }}</span>
+            </th>
+            <th class="sortable" @click="toggleSort('depositTotal')" :class="{sorted: sortKey === 'depositTotal'}">
+              已付定金 <span class="sort-arrow">{{ sortArrow('depositTotal') }}</span>
+            </th>
+            <th>状态 <span class="filter-btn" :class="{active: filters.status.length}" @click.stop="toggleFilter('status')">▼</span></th>
+            <th class="col-actions">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="q in pagedQuotes" :key="q.projNo + '_' + q.createdBy">
+            <td>{{ formatDate(q.date) }}</td>
+            <td><strong>{{ q.projNo }}</strong></td>
+            <td>{{ q.customerName }}</td>
+            <td>{{ q.customerIC || '-' }}</td>
+            <td>{{ q.customerContact || '-' }}</td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" :title="q.customerAddress">{{ q.customerAddress || '-' }}</td>
+            <td>{{ q.salesperson || q.createdBy }}</td>
+            <td class="col-amount">{{ formatMoney(q.total) }}</td>
+            <td class="col-amount" style="color:#28a745">{{ formatMoney(q.depositTotal) }}</td>
+            <td>
+              <span :class="statusBadgeClass(q)">{{ statusLabel(q) }}</span>
+            </td>
+            <td class="col-actions">
+              <button class="btn-sm" @click="openPreview(q)">👁 预览</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary-row">
+      <div class="item">
+        <div class="label">当前显示</div>
+        <div class="value">{{ filteredQuotes.length }} 单</div>
+      </div>
+      <div class="item">
+        <div class="label">总金额</div>
+        <div class="value">RM {{ formatMoney(totalAmount) }}</div>
+      </div>
+      <div class="item">
+        <div class="label">已收定金</div>
+        <div class="value" style="color:#28a745">RM {{ formatMoney(totalDeposit) }}</div>
+      </div>
+      <div class="item">
+        <div class="label">未付款余额</div>
+        <div class="value" style="color:#fd7e14">RM {{ formatMoney(totalAmount - totalDeposit) }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading / Empty -->
+  <div v-if="loading" class="loading">加载中…</div>
+  <div v-else-if="filteredQuotes.length === 0 && !errorMsg" class="empty">
+    暂无数据。<br>请检查网络或刷新。
+  </div>
+
+  <!-- ========== Filter Popover ========== -->
+  <div v-if="activeFilter" class="filter-popover" :style="filterPopoverStyle" @click.stop>
+    <h4>筛选: {{ activeFilter }}</h4>
+    <label><input type="checkbox" @change="toggleAllFilter(activeFilter, $event)"> 全选/反选</label>
+    <label v-for="opt in filterOptions[activeFilter]" :key="opt">
+      <input type="checkbox" :checked="filters[activeFilter].includes(opt)" @change="toggleFilterValue(activeFilter, opt)">
+      {{ opt || '(空)' }}
+    </label>
+    <div class="actions">
+      <button class="btn" @click="applyFilter">应用</button>
+      <button class="btn btn-secondary" @click="activeFilter = null">关闭</button>
+    </div>
+  </div>
+
+  <!-- ========== Preview Modal ========== -->
+  <div v-if="previewQuote" class="modal-mask" @click.self="closePreview">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>报价单预览 — {{ previewQuote.projNo }}</h3>
+        <button class="modal-close" @click="closePreview">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="quote-preview" id="quote-print-area">
+          <div class="qp-header">
+            <h1>🏠 Squirrel Designer 全屋定制</h1>
+            <div class="proj-no">工程单号: <strong>{{ previewQuote.projNo }}</strong></div>
+          </div>
+          <div class="qp-info">
+            <div class="field"><div class="label">客户姓名:</div><div class="value">{{ previewQuote.customerName }}</div></div>
+            <div class="field"><div class="label">身份证:</div><div class="value">{{ previewQuote.customerIC || '-' }}</div></div>
+            <div class="field"><div class="label">联系电话:</div><div class="value">{{ previewQuote.customerContact || '-' }}</div></div>
+            <div class="field"><div class="label">客户地址:</div><div class="value">{{ previewQuote.customerAddress || '-' }}</div></div>
+            <div class="field"><div class="label">业务员:</div><div class="value">{{ previewQuote.salesperson }}</div></div>
+            <div class="field"><div class="label">设计师:</div><div class="value">{{ previewQuote.designerName || '-' }}</div></div>
+            <div class="field"><div class="label">量尺师:</div><div class="value">{{ previewQuote.measurementEngineer || '-' }}</div></div>
+            <div class="field"><div class="label">报价日期:</div><div class="value">{{ formatDate(previewQuote.date) }}</div></div>
+          </div>
+          <table v-if="previewQuote.items && previewQuote.items.length">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>项目</th>
+                <th>规格</th>
+                <th style="text-align:right">数量</th>
+                <th style="text-align:right">单价 (RM)</th>
+                <th style="text-align:right">小计 (RM)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, idx) in previewQuote.items" :key="idx">
+                <td>{{ idx + 1 }}</td>
+                <td>{{ item.name || item.productName || item.description }}</td>
+                <td>{{ item.spec || item.specification || '' }}</td>
+                <td style="text-align:right">{{ item.qty || item.quantity || 1 }}</td>
+                <td style="text-align:right">{{ formatMoney(item.price || item.unitPrice) }}</td>
+                <td style="text-align:right">{{ formatMoney(item.subtotal || (item.price * item.qty) || 0) }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="qp-totals">
+            <div class="row" v-if="previewQuote.discount">
+              <div class="label">折扣:</div>
+              <div class="value">- RM {{ formatMoney(previewQuote.discount) }}</div>
+            </div>
+            <div class="row grand">
+              <div class="label">总计:</div>
+              <div class="value">RM {{ formatMoney(previewQuote.total) }}</div>
+            </div>
+            <div class="row" v-if="(previewQuote.depositRecords || []).length">
+              <div class="label">已付定金:</div>
+              <div class="value" style="color:#28a745">RM {{ formatMoney(totalDepositOf(previewQuote)) }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" @click="printQuote">🖨 打印</button>
+        <button class="btn" @click="exportPreviewPDF">📄 导出 PDF</button>
+        <button class="btn" @click="exportPreviewExcel">📊 导出 Excel</button>
+        <button class="btn btn-secondary" @click="closePreview">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, computed, onMounted, reactive } = Vue;
+
+// ============ Config ============
+const GAS_URL = 'YOUR_GAS_WEB_APP_URL_HERE';  // ← 部署后替换
+
+// ============ App ============
+createApp({
+  setup() {
+    const quotes = ref([]);
+    const users = ref([]);
+    const loading = ref(false);
+    const errorMsg = ref('');
+    const searchQuery = ref('');
+    const activeTab = ref('all');
+    const sortKey = ref('date');
+    const sortDir = ref('desc');
+    const previewQuote = ref(null);
+    const activeFilter = ref(null);
+    const filterPopoverPos = ref({ x: 0, y: 0 });
+
+    const filters = reactive({
+      customerIC: [],
+      customerContact: [],
+      status: []
+    });
+
+    // ============ Data Loading ============
+    async function callGAS(action, params = {}) {
+      const url = new URL(GAS_URL);
+      url.searchParams.set('action', action);
+      Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+      const res = await fetch(url, { method: 'GET', redirect: 'follow' });
+      return await res.json();
+    }
+
+    async function loadData() {
+      loading.value = true;
+      errorMsg.value = '';
+      try {
+        const [usersRes, quotesRes] = await Promise.all([
+          callGAS('getDetailedUsers'),
+          callGAS('getAllQuotesSummary')
+        ]);
+        if (!usersRes.success) throw new Error(usersRes.message);
+        if (!quotesRes.success) throw new Error(quotesRes.message);
+        users.value = usersRes.users;
+        quotes.value = quotesRes.quotes;
+        if (quotes.value.length === 0) {
+          errorMsg.value = '报价系统暂无数据。请先在 Squirrel Designer 报价系统里报价。';
+        }
+      } catch (e) {
+        errorMsg.value = '加载失败: ' + e.message + ' — 请检查 GAS_URL 是否配置正确';
+        console.error(e);
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    // ============ Filtering / Sorting ============
+    const filteredQuotes = computed(() => {
+      let result = quotes.value;
+
+      // Tab filter
+      if (activeTab.value !== 'all') {
+        const u = users.value.find(x => x.username === activeTab.value);
+        const displayName = u ? u.displayName : activeTab.value;
+        result = result.filter(q => (q.salesperson || q.createdBy) === displayName || q.createdBy === activeTab.value);
+      }
+
+      // Search
+      const q = searchQuery.value.trim().toLowerCase();
+      if (q) {
+        result = result.filter(x =>
+          (x.projNo || '').toLowerCase().includes(q) ||
+          (x.customerName || '').toLowerCase().includes(q) ||
+          (x.customerContact || '').toLowerCase().includes(q) ||
+          (x.customerIC || '').toLowerCase().includes(q) ||
+          (x.customerAddress || '').toLowerCase().includes(q)
+        );
+      }
+
+      // Column filters
+      if (filters.customerIC.length) {
+        result = result.filter(x => filters.customerIC.includes(x.customerIC || ''));
+      }
+      if (filters.customerContact.length) {
+        result = result.filter(x => filters.customerContact.includes(x.customerContact || ''));
+      }
+      if (filters.status.length) {
+        result = result.filter(x => filters.status.includes(x.status || 'pending'));
+      }
+
+      // Sort
+      const key = sortKey.value;
+      const dir = sortDir.value === 'asc' ? 1 : -1;
+      result = [...result].sort((a, b) => {
+        let va = a[key], vb = b[key];
+        if (key === 'date') {
+          va = new Date(va || 0).getTime();
+          vb = new Date(vb || 0).getTime();
+        } else if (key === 'total' || key === 'depositTotal') {
+          va = va || 0; vb = vb || 0;
+        } else {
+          va = (va || '').toString().toLowerCase();
+          vb = (vb || '').toString().toLowerCase();
+        }
+        return va < vb ? -dir : va > vb ? dir : 0;
+      });
+
+      return result;
+    });
+
+    // Pagination (just first 500 for now)
+    const pagedQuotes = computed(() => filteredQuotes.value.slice(0, 500));
+
+    // ============ KPIs ============
+    const totalAmount = computed(() => filteredQuotes.value.reduce((s, q) => s + (q.total || 0), 0));
+    const totalDeposit = computed(() => filteredQuotes.value.reduce((s, q) => s + (q.depositTotal || 0), 0));
+    const todayNewCount = computed(() => {
+      const today = new Date().toDateString();
+      return filteredQuotes.value.filter(q => new Date(q.date || q.createdAt || 0).toDateString() === today).length;
+    });
+
+    // ============ Sort ============
+    function toggleSort(key) {
+      if (sortKey.value === key) {
+        sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortKey.value = key;
+        sortDir.value = 'desc';
+      }
+    }
+    function sortArrow(key) {
+      if (sortKey.value !== key) return '↕';
+      return sortDir.value === 'asc' ? '↑' : '↓';
+    }
+
+    // ============ Filter Popover ============
+    const filterOptions = computed(() => {
+      const opt = (key) => {
+        const vals = new Set();
+        quotes.value.forEach(q => vals.add(q[key] || ''));
+        return Array.from(vals).sort();
+      };
+      return {
+        customerIC: opt('customerIC'),
+        customerContact: opt('customerContact'),
+        status: ['pending', 'ordered', 'partial', 'completed']
+      };
+    });
+    const filterPopoverStyle = computed(() => ({
+      top: filterPopoverPos.value.y + 'px',
+      left: filterPopoverPos.value.x + 'px'
+    }));
+    function toggleFilter(key) {
+      if (activeFilter.value === key) {
+        activeFilter.value = null;
+      } else {
+        activeFilter.value = key;
+        // estimate position (simple)
+        filterPopoverPos.value = { x: 200, y: 200 };
+      }
+    }
+    function toggleFilterValue(key, val) {
+      const arr = filters[key];
+      const idx = arr.indexOf(val);
+      if (idx >= 0) arr.splice(idx, 1);
+      else arr.push(val);
+    }
+    function toggleAllFilter(key, ev) {
+      const opts = filterOptions.value[key];
+      if (filters[key].length === opts.length) {
+        filters[key] = [];
+      } else {
+        filters[key] = [...opts];
+      }
+    }
+    function applyFilter() {
+      activeFilter.value = null;
+    }
+    document.addEventListener('click', () => { activeFilter.value = null; });
+
+    // ============ Search Debounce ============
+    let searchTimer = null;
+    function onSearchInput() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {}, 200);
+    }
+
+    // ============ Preview ============
+    async function openPreview(q) {
+      try {
+        const res = await callGAS('getQuoteDetail', { username: q.createdBy, projNo: q.projNo });
+        if (res.success) {
+          previewQuote.value = res.quote;
+        } else {
+          alert('加载报价失败: ' + res.message);
+        }
+      } catch (e) {
+        alert('加载报价失败: ' + e.message);
+      }
+    }
+    function closePreview() {
+      previewQuote.value = null;
+    }
+    function totalDepositOf(q) {
+      return (q.depositRecords || []).reduce((s, d) => s + (d.amount || 0), 0);
+    }
+
+    // ============ Print / PDF / Excel ============
+    function printQuote() {
+      window.print();
+    }
+    async function exportPreviewPDF() {
+      try {
+        const area = document.getElementById('quote-print-area');
+        const canvas = await html2canvas(area, { scale: 2, useCORS: true });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save(`报价单_${previewQuote.value.projNo}.pdf`);
+      } catch (e) {
+        alert('PDF 导出失败: ' + e.message);
+        printQuote(); // fallback
+      }
+    }
+    function exportPreviewExcel() {
+      const q = previewQuote.value;
+      const rows = [];
+      (q.items || []).forEach((it, i) => {
+        rows.push({
+          '序号': i + 1,
+          '项目': it.name || it.productName || '',
+          '规格': it.spec || '',
+          '数量': it.qty || 1,
+          '单价 (RM)': it.price || 0,
+          '小计 (RM)': it.subtotal || (it.price * it.qty) || 0
+        });
+      });
+      rows.push({});
+      rows.push({ '序号': '', '项目': '', '规格': '', '数量': '', '单价 (RM)': '总计:', '小计 (RM)': q.total || 0 });
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '报价单');
+      XLSX.writeFile(wb, `报价单_${q.projNo}.xlsx`);
+    }
+    function exportToExcel() {
+      // Export current filtered list
+      const rows = filteredQuotes.value.map(q => ({
+        '创建日期': formatDate(q.date),
+        '工程单号': q.projNo,
+        '客户名字': q.customerName,
+        '客户身份证': q.customerIC,
+        '客户联系号码': q.customerContact,
+        '客户地址': q.customerAddress,
+        '业务员': q.salesperson || q.createdBy,
+        '总金额 (RM)': q.total,
+        '已付定金 (RM)': q.depositTotal,
+        '状态': statusLabel(q)
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '报价列表');
+      XLSX.writeFile(wb, `财务订单_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    // ============ Status ============
+    function statusLabel(q) {
+      if (q.completedAt) return '已完成';
+      if (q.orderedAt) return '已下单';
+      if ((q.depositTotal || 0) > 0) return '部分付款';
+      return '待报价';
+    }
+    function statusBadgeClass(q) {
+      if (q.completedAt) return 'badge badge-completed';
+      if (q.orderedAt) return 'badge badge-ordered';
+      if ((q.depositTotal || 0) > 0) return 'badge badge-partial';
+      return 'badge badge-pending';
+    }
+
+    // ============ Formatters ============
+    function formatMoney(n) {
+      return (n || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function formatDate(d) {
+      if (!d) return '-';
+      try {
+        const dt = new Date(d);
+        if (isNaN(dt.getTime())) return d;
+        return dt.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+      } catch { return d; }
+    }
+
+    onMounted(() => {
+      if (GAS_URL === 'YOUR_GAS_WEB_APP_URL_HERE') {
+        errorMsg.value = '⚠️ 请先在 index.html 里配置 GAS_URL (GAS 部署后获取的 Web App URL)';
+        return;
+      }
+      loadData();
+    });
+
+    return {
+      quotes, users, loading, errorMsg, searchQuery, activeTab,
+      sortKey, sortDir, toggleSort, sortArrow,
+      filteredQuotes, pagedQuotes,
+      totalAmount, totalDeposit, todayNewCount,
+      filters, activeFilter, filterOptions, filterPopoverStyle,
+      toggleFilter, toggleFilterValue, toggleAllFilter, applyFilter,
+      onSearchInput,
+      previewQuote, openPreview, closePreview, totalDepositOf,
+      printQuote, exportPreviewPDF, exportPreviewExcel, exportToExcel,
+      statusLabel, statusBadgeClass, formatMoney, formatDate,
+      loadData
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
