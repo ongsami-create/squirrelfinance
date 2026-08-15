@@ -78,7 +78,7 @@ function extractQuoteSummary(quote, folderName) {
     lastSynced: quote.lastSynced || '',
     lastModified: quote.lastModified || '',
     // 标记：是否最终文件（保留 final_ 兼容）
-    isFinal: !!(quote.id && quote.id.indexOf('final_') === 0)
+    isFinal: !!(quote.id && String(quote.id).indexOf('final_') === 0)
   };
 }
 
@@ -108,7 +108,13 @@ function getDetailedUsers() {
         const files = folder.getFiles();
         while (files.hasNext()) {
           const file = files.next();
-          if (file.getName().endsWith('.json')) quoteCount++;
+          const name = file.getName();
+          if (!name.endsWith('.json')) continue;
+          if (name === 'stats_cache.json' || name === 'users.json' || name === 'activity_logs.json' || name === 'admin_logs.json' || name === 'products.json') continue;
+          try {
+            const data = JSON.parse(file.getBlob().getDataAsString());
+            if (data.projNo || data.id) quoteCount++;
+          } catch (e) {}
         }
       }
       return {
@@ -140,17 +146,20 @@ function getAllQuotesSummary() {
 
     while (subFolders.hasNext()) {
       const folder = subFolders.next();
-      if (!isValidUserFolder(folder.getName())) continue;
-
       const folderName = folder.getName();
+      if (!isValidUserFolder(folderName)) continue;
+
       const files = folder.getFiles();
 
       while (files.hasNext()) {
         const file = files.next();
-        if (!file.getName().endsWith('.json')) continue;
+        const name = file.getName();
+        if (!name.endsWith('.json')) continue;
+        if (['stats_cache.json','users.json','activity_logs.json','admin_logs.json','products.json'].indexOf(name) >= 0) continue;
 
         try {
           const quote = JSON.parse(file.getBlob().getDataAsString());
+          if (!quote.projNo && !quote.id) continue;
           quotes.push(extractQuoteSummary(quote, folderName));
         } catch (parseErr) {
           // 跳过损坏文件
@@ -207,6 +216,122 @@ function getQuoteDetail(username, projNo) {
   }
 }
 
+// 0. 调试用: 看 Drive 里实际 .json 文件长啥样
+function debugFiles() {
+  try {
+    const init = initializeFolders();
+    if (!init.success) return init;
+
+    const result = { folders: [] };
+    const subFolders = mainFolder.getFolders();
+
+    while (subFolders.hasNext()) {
+      const folder = subFolders.next();
+      if (!isValidUserFolder(folder.getName())) continue;
+
+      const folderName = folder.getName();
+      const folderInfo = { folder: folderName, files: [], count: 0, errors: [] };
+
+      const files = folder.getFiles();
+      while (files.hasNext()) {
+        const file = files.next();
+        if (!file.getName().endsWith('.json')) continue;
+        folderInfo.count++;
+
+        try {
+          const content = file.getBlob().getDataAsString();
+          let parsed = null;
+          let parseOk = false;
+          try {
+            parsed = JSON.parse(content);
+            parseOk = true;
+          } catch (e) {
+            folderInfo.errors.push({ file: file.getName(), error: 'JSON parse failed: ' + e.message });
+          }
+
+          // 只记录前 2 个文件的详细结构 (避免响应过大)
+          if (folderInfo.files.length < 2) {
+            const sample = {
+              name: file.getName(),
+              size: content.length,
+              parseOk: parseOk,
+              keys: parseOk && parsed ? Object.keys(parsed) : []
+            };
+            if (parseOk && parsed) {
+              // 记录关键字段值
+              sample.projNo = parsed.projNo || '';
+              sample.customerName = parsed.customerName || '';
+              sample.total = parsed.total;
+              sample.date = parsed.date || '';
+              sample.id = parsed.id || '';
+            }
+            folderInfo.files.push(sample);
+          }
+        } catch (e) {
+          folderInfo.errors.push({ file: file.getName(), error: e.toString() });
+        }
+      }
+      result.folders.push(folderInfo);
+    }
+
+    return result;
+  } catch (error) {
+    return { success: false, message: error.toString() };
+  }
+}
+
+// 0b. 详细诊断 getAllQuotesSummary 的处理过程
+function debugGetAllQuotes() {
+  try {
+    const init = initializeFolders();
+    if (!init.success) return init;
+
+    const trace = [];
+    const subFolders = mainFolder.getFolders();
+    while (subFolders.hasNext()) {
+      const folder = subFolders.next();
+      const folderName = folder.getName();
+      if (!isValidUserFolder(folderName)) {
+        trace.push({ folder: folderName, skipped: 'invalid' });
+        continue;
+      }
+      const files = folder.getFiles();
+      const fileTrace = [];
+      while (files.hasNext()) {
+        const file = files.next();
+        const name = file.getName();
+        const step = { name: name };
+        if (!name.endsWith('.json')) { step.skipped = 'not-json'; fileTrace.push(step); continue; }
+        if (['stats_cache.json','users.json','activity_logs.json','admin_logs.json','products.json'].indexOf(name) >= 0) {
+          step.skipped = 'system-file'; fileTrace.push(step); continue;
+        }
+        try {
+          const content = file.getBlob().getDataAsString();
+          step.size = content.length;
+          let parsed;
+          try { parsed = JSON.parse(content); step.parseOk = true; }
+          catch (e) { step.parseOk = false; step.parseError = e.message; }
+          if (step.parseOk) {
+            step.hasProjNo = !!parsed.projNo;
+            step.hasId = !!parsed.id;
+            step.projNo = parsed.projNo || '';
+            step.id = parsed.id || '';
+            if (!step.hasProjNo && !step.hasId) { step.skipped = 'no-projNo-id'; }
+            else { step.pushed = true; }
+          }
+        } catch (e) {
+          step.error = e.toString();
+        }
+        fileTrace.push(step);
+      }
+      trace.push({ folder: folderName, files: fileTrace });
+    }
+    return trace;
+  } catch (error) {
+    return { success: false, message: error.toString() };
+  }
+}
+
 // ==================== API 入口 ====================
 
 function doGet(e) {
@@ -217,6 +342,12 @@ function doGet(e) {
     switch (action) {
       case 'ping':
         result = ping();
+        break;
+      case 'debugFiles':
+        result = debugFiles();
+        break;
+      case 'debugGetAllQuotes':
+        result = debugGetAllQuotes();
         break;
       case 'getDetailedUsers':
         result = getDetailedUsers();
