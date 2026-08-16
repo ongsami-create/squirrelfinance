@@ -2,14 +2,17 @@
 // Squirrel Finance - Google Apps Script Backend
 // 完全只读 — 财务订单查询系统专用
 // 读取 Squirrel Designer Drive 数据，不写任何内容
+// 优化版 (v1.1): CacheService 缓存 + items 内联 + nocache 参数
 // ========================================
 
 const CONFIG = {
-  MAIN_FOLDER: 'Squirrel Designer',  // Squirrel Designer 主文件夹
-  USERS_FILE: 'users.json',          // 在 admin 子文件夹下
+  MAIN_FOLDER: 'Squirrel Designer',
+  USERS_FILE: 'users.json',
   ADMIN_FOLDER: 'admin',
   SYSTEM_RESERVED: ['admin', 'squirrel analysis', 'Commission', 'offline_user']
 };
+
+const CACHE_TTL_SEC = 300;  // 5 分钟
 
 let mainFolder = null;
 let adminFolder = null;
@@ -21,14 +24,12 @@ function initializeFolders() {
   try {
     const rootFolders = DriveApp.getRootFolder().getFoldersByName(CONFIG.MAIN_FOLDER);
     if (!rootFolders.hasNext()) {
-      return { success: false, message: 'Squirrel Designer 主文件夹不存在，请先在 Squirrel Designer 报价系统中初始化数据' };
+      return { success: false, message: 'Squirrel Designer 主文件夹不存在' };
     }
     mainFolder = rootFolders.next();
 
     const adminFolders = mainFolder.getFoldersByName(CONFIG.ADMIN_FOLDER);
-    if (!adminFolders.hasNext()) {
-      return { success: false, message: 'admin 子文件夹不存在' };
-    }
+    if (!adminFolders.hasNext()) return { success: false, message: 'admin 子文件夹不存在' };
     adminFolder = adminFolders.next();
 
     const userFiles = adminFolder.getFilesByName(CONFIG.USERS_FILE);
@@ -37,7 +38,6 @@ function initializeFolders() {
     } else {
       return { success: false, message: 'users.json 不存在' };
     }
-
     return { success: true };
   } catch (error) {
     return { success: false, message: 'initializeFolders 失败: ' + error.toString() };
@@ -52,8 +52,57 @@ function isValidUserFolder(folderName) {
   return usersCache.users.some(function(u) { return u.username === folderName; });
 }
 
-// 从 quote JSON 提取摘要字段（财务列表用, 不含 items 数组, 减少数据传输）
+// ============ CacheService helpers (跨调用持久化) ============
+// GAS Web App 每次 HTTP 请求都是新执行上下文, 模块级 let 变量会被重置
+// 必须用 CacheService 才能跨调用复用
+function cacheGet(key) {
+  try {
+    const v = CacheService.getScriptCache().get(key);
+    return v ? JSON.parse(v) : null;
+  } catch (e) { return null; }
+}
+function cachePut(key, value, ttl) {
+  try {
+    CacheService.getScriptCache().put(key, JSON.stringify(value), ttl || CACHE_TTL_SEC);
+  } catch (e) {}
+}
+
+// 跳过系统/缓存文件
+const SKIP_FILES = ['stats_cache.json','users.json','activity_logs.json','admin_logs.json','products.json'];
+function isSkipFile(name) {
+  return SKIP_FILES.indexOf(name) >= 0;
+}
+
+// 从 quote JSON 提取摘要字段（含 items 关键字段, 供预览用, 省一次 getQuoteDetail 调用）
 function extractQuoteSummary(quote, folderName) {
+  // items 轻量化: 只保留预览需要的字段
+  const slimItems = (quote.items || []).map(function(it) {
+    return {
+      id: it.id,
+      area: it.area,
+      itemB: it.itemB,
+      name: it.name,
+      productName: it.productName,
+      description: it.description,
+      spec: it.spec,
+      specification: it.specification,
+      remarks: it.remarks,
+      noteA: it.noteA,
+      noteB: it.noteB,
+      w: it.w || 0,
+      h: it.h || 0,
+      d: it.d || 0,
+      value: it.value || 0,
+      qty: it.qty || it.quantity || 1,
+      quantity: it.quantity,
+      unitPrice: it.unitPrice || it.price || 0,
+      price: it.price,
+      total: it.total || it.subtotal || 0,
+      subtotal: it.subtotal,
+      algorithm: it.algorithm
+    };
+  });
+
   return {
     id: quote.id || '',
     projNo: quote.projNo || '',
@@ -69,15 +118,20 @@ function extractQuoteSummary(quote, folderName) {
     date: quote.date || '',
     createdAt: quote.createdAt || quote.date || '',
     total: quote.total || 0,
+    subtotal: quote.subtotal || 0,
     discount: quote.discount || 0,
     depositTotal: (quote.depositRecords || []).reduce(function(sum, d) { return sum + (d.amount || 0); }, 0),
+    fees: quote.fees || {},
+    customFees: quote.customFees || [],
+    feeRemarks: quote.feeRemarks || '',
+    depositRecords: quote.depositRecords || [],
     orderedAt: quote.orderedAt || '',
     status: quote.status || '',
     completedAt: quote.completedAt || '',
-    createdBy: folderName,  // Drive folder 名（用于校验, 仅供参考, 判定归属用 salesperson）
+    createdBy: folderName,
     lastSynced: quote.lastSynced || '',
     lastModified: quote.lastModified || '',
-    // 标记：是否最终文件（保留 final_ 兼容）
+    items: slimItems,  // ✅ 含 items 供预览用, 省一次 getQuoteDetail 调用
     isFinal: !!(quote.id && String(quote.id).indexOf('final_') === 0)
   };
 }
@@ -90,13 +144,16 @@ function ping() {
     success: true,
     message: 'Squirrel Finance API is running',
     timestamp: new Date().toISOString(),
-    version: '1.0.0'
+    version: '1.1.0'  // 优化版
   };
 }
 
-// 2. 列所有用户 + 每人的 quote 数量
+// 2. 列所有用户 + 每人的 quote 数量 (用 cache 5min)
 function getDetailedUsers() {
   try {
+    const cached = cacheGet('detailed_users_v1');
+    if (cached) return { success: true, users: cached, totalCount: cached.length, cached: true };
+
     const init = initializeFolders();
     if (!init.success) return init;
 
@@ -109,8 +166,7 @@ function getDetailedUsers() {
         while (files.hasNext()) {
           const file = files.next();
           const name = file.getName();
-          if (!name.endsWith('.json')) continue;
-          if (name === 'stats_cache.json' || name === 'users.json' || name === 'activity_logs.json' || name === 'admin_logs.json' || name === 'products.json') continue;
+          if (!name.endsWith('.json') || isSkipFile(name)) continue;
           try {
             const data = JSON.parse(file.getBlob().getDataAsString());
             if (data.projNo || data.id) quoteCount++;
@@ -126,18 +182,24 @@ function getDetailedUsers() {
       };
     });
 
-    // 过滤：只保留活跃用户且 quote 数量 > 0 的（财务关心的）
     const activeUsers = users.filter(function(u) { return u.isActive && u.quoteCount > 0; });
+    cachePut('detailed_users_v1', activeUsers, CACHE_TTL_SEC);
 
-    return { success: true, users: activeUsers, totalCount: activeUsers.length };
+    return { success: true, users: activeUsers, totalCount: activeUsers.length, cached: false };
   } catch (error) {
     return { success: false, message: error.toString() };
   }
 }
 
-// 3. 一次拉所有用户的所有 quote 摘要（财务系统主入口, 列表页用）
-function getAllQuotesSummary() {
+// 3. 一次拉所有用户的所有 quote 摘要（财务系统主入口, 列表页用, 带 items + cache 5min）
+function getAllQuotesSummary(nocache) {
   try {
+    // 缓存命中
+    if (!nocache) {
+      const cached = cacheGet('all_quotes_summary_v1');
+      if (cached) return { success: true, quotes: cached.quotes, totalCount: cached.quotes.length, cached: true, cacheTime: cached.ts };
+    }
+
     const init = initializeFolders();
     if (!init.success) return init;
 
@@ -154,8 +216,7 @@ function getAllQuotesSummary() {
       while (files.hasNext()) {
         const file = files.next();
         const name = file.getName();
-        if (!name.endsWith('.json')) continue;
-        if (['stats_cache.json','users.json','activity_logs.json','admin_logs.json','products.json'].indexOf(name) >= 0) continue;
+        if (!name.endsWith('.json') || isSkipFile(name)) continue;
 
         try {
           const quote = JSON.parse(file.getBlob().getDataAsString());
@@ -174,17 +235,21 @@ function getAllQuotesSummary() {
       return db - da;
     });
 
+    // 写缓存 (timestamp 用于显示给用户)
+    cachePut('all_quotes_summary_v1', { quotes: quotes, ts: new Date().toISOString() }, CACHE_TTL_SEC);
+
     return {
       success: true,
       quotes: quotes,
-      totalCount: quotes.length
+      totalCount: quotes.length,
+      cached: false
     };
   } catch (error) {
     return { success: false, message: error.toString() };
   }
 }
 
-// 4. 拉单份完整 quote（预览用, 含 items / fees 等）
+// 4. 拉单份完整 quote（备用, 现在 list API 已经返回 items, 一般不用）
 function getQuoteDetail(username, projNo) {
   try {
     const init = initializeFolders();
@@ -216,7 +281,8 @@ function getQuoteDetail(username, projNo) {
   }
 }
 
-// 0. 调试用: 看 Drive 里实际 .json 文件长啥样
+// ==================== 调试用 API (备用) ====================
+
 function debugFiles() {
   try {
     const init = initializeFolders();
@@ -224,7 +290,6 @@ function debugFiles() {
 
     const result = { folders: [] };
     const subFolders = mainFolder.getFolders();
-
     while (subFolders.hasNext()) {
       const folder = subFolders.next();
       if (!isValidUserFolder(folder.getName())) continue;
@@ -240,25 +305,13 @@ function debugFiles() {
 
         try {
           const content = file.getBlob().getDataAsString();
-          let parsed = null;
-          let parseOk = false;
-          try {
-            parsed = JSON.parse(content);
-            parseOk = true;
-          } catch (e) {
-            folderInfo.errors.push({ file: file.getName(), error: 'JSON parse failed: ' + e.message });
-          }
-
-          // 只记录前 2 个文件的详细结构 (避免响应过大)
+          let parsed = null, parseOk = false;
+          try { parsed = JSON.parse(content); parseOk = true; }
+          catch (e) { folderInfo.errors.push({ file: file.getName(), error: 'JSON parse failed: ' + e.message }); }
           if (folderInfo.files.length < 2) {
-            const sample = {
-              name: file.getName(),
-              size: content.length,
-              parseOk: parseOk,
-              keys: parseOk && parsed ? Object.keys(parsed) : []
-            };
+            const sample = { name: file.getName(), size: content.length, parseOk };
             if (parseOk && parsed) {
-              // 记录关键字段值
+              sample.keys = Object.keys(parsed);
               sample.projNo = parsed.projNo || '';
               sample.customerName = parsed.customerName || '';
               sample.total = parsed.total;
@@ -267,69 +320,12 @@ function debugFiles() {
             }
             folderInfo.files.push(sample);
           }
-        } catch (e) {
-          folderInfo.errors.push({ file: file.getName(), error: e.toString() });
-        }
+        } catch (e) { folderInfo.errors.push({ file: file.getName(), error: e.toString() }); }
       }
       result.folders.push(folderInfo);
     }
-
     return result;
-  } catch (error) {
-    return { success: false, message: error.toString() };
-  }
-}
-
-// 0b. 详细诊断 getAllQuotesSummary 的处理过程
-function debugGetAllQuotes() {
-  try {
-    const init = initializeFolders();
-    if (!init.success) return init;
-
-    const trace = [];
-    const subFolders = mainFolder.getFolders();
-    while (subFolders.hasNext()) {
-      const folder = subFolders.next();
-      const folderName = folder.getName();
-      if (!isValidUserFolder(folderName)) {
-        trace.push({ folder: folderName, skipped: 'invalid' });
-        continue;
-      }
-      const files = folder.getFiles();
-      const fileTrace = [];
-      while (files.hasNext()) {
-        const file = files.next();
-        const name = file.getName();
-        const step = { name: name };
-        if (!name.endsWith('.json')) { step.skipped = 'not-json'; fileTrace.push(step); continue; }
-        if (['stats_cache.json','users.json','activity_logs.json','admin_logs.json','products.json'].indexOf(name) >= 0) {
-          step.skipped = 'system-file'; fileTrace.push(step); continue;
-        }
-        try {
-          const content = file.getBlob().getDataAsString();
-          step.size = content.length;
-          let parsed;
-          try { parsed = JSON.parse(content); step.parseOk = true; }
-          catch (e) { step.parseOk = false; step.parseError = e.message; }
-          if (step.parseOk) {
-            step.hasProjNo = !!parsed.projNo;
-            step.hasId = !!parsed.id;
-            step.projNo = parsed.projNo || '';
-            step.id = parsed.id || '';
-            if (!step.hasProjNo && !step.hasId) { step.skipped = 'no-projNo-id'; }
-            else { step.pushed = true; }
-          }
-        } catch (e) {
-          step.error = e.toString();
-        }
-        fileTrace.push(step);
-      }
-      trace.push({ folder: folderName, files: fileTrace });
-    }
-    return trace;
-  } catch (error) {
-    return { success: false, message: error.toString() };
-  }
+  } catch (error) { return { success: false, message: error.toString() }; }
 }
 
 // ==================== API 入口 ====================
@@ -337,6 +333,7 @@ function debugGetAllQuotes() {
 function doGet(e) {
   try {
     const action = (e && e.parameter && e.parameter.action) || 'ping';
+    const nocache = e && e.parameter && e.parameter.nocache === '1';
     let result;
 
     switch (action) {
@@ -346,14 +343,11 @@ function doGet(e) {
       case 'debugFiles':
         result = debugFiles();
         break;
-      case 'debugGetAllQuotes':
-        result = debugGetAllQuotes();
-        break;
       case 'getDetailedUsers':
         result = getDetailedUsers();
         break;
       case 'getAllQuotesSummary':
-        result = getAllQuotesSummary();
+        result = getAllQuotesSummary(nocache);
         break;
       case 'getQuoteDetail':
         result = getQuoteDetail(e.parameter.username, e.parameter.projNo);

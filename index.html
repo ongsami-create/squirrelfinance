@@ -572,7 +572,7 @@
         placeholder="搜索客户名 / 工程单号 / 客户电话 / 客户身份证…"
       />
     </div>
-    <button class="btn-secondary btn" @click="loadData" :disabled="loading">
+    <button class="btn-secondary btn" @click="loadData(true)" :disabled="loading">
       {{ loading ? '加载中…' : '🔄 刷新数据' }}
     </button>
     <button class="btn-secondary btn" @click="exportToExcel" :disabled="loading || filteredQuotes.length === 0">
@@ -623,7 +623,7 @@
   <!-- Error -->
   <div v-if="errorMsg" class="error-banner">
     ⚠️ {{ errorMsg }}
-    <button class="btn-sm" style="float:right" @click="loadData">重试</button>
+    <button class="btn-sm" style="float:right" @click="loadData(true)">重试</button>
   </div>
 
   <!-- Table -->
@@ -675,6 +675,13 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Load more -->
+    <div v-if="pagedQuotes.length < filteredQuotes.length" style="text-align:center;padding:16px;">
+      <button class="btn-secondary btn" @click="loadMore">
+        加载更多 (还剩 {{ filteredQuotes.length - pagedQuotes.length }} 单)
+      </button>
     </div>
 
     <!-- Summary -->
@@ -888,7 +895,7 @@
 </div>
 
 <script>
-const { createApp, ref, computed, onMounted, reactive } = Vue;
+const { createApp, ref, computed, onMounted, reactive, watch } = Vue;
 
 // ============ Config ============
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyrJJD7D1mPTKq5dmaJkMJvVvfoyzPSmhZWLzAvHRehnLlUH91ZuzXQqFdKh_nxgpkAuA/exec';  // v1.0 部署于 2026-08-15
@@ -923,18 +930,23 @@ createApp({
       return await res.json();
     }
 
-    async function loadData() {
+    async function loadData(forceRefresh) {
       loading.value = true;
       errorMsg.value = '';
+      const t0 = performance.now();
       try {
+        const nocacheParam = forceRefresh ? '&nocache=1' : '';
         const [usersRes, quotesRes] = await Promise.all([
           callGAS('getDetailedUsers'),
-          callGAS('getAllQuotesSummary')
+          callGAS('getAllQuotesSummary' + nocacheParam)
         ]);
         if (!usersRes.success) throw new Error(usersRes.message);
         if (!quotesRes.success) throw new Error(quotesRes.message);
         users.value = usersRes.users;
         quotes.value = quotesRes.quotes;
+        const dt = Math.round(performance.now() - t0);
+        const cacheNote = quotesRes.cached ? '(缓存命中)' : '(实时)';
+        console.log(`[Squirrel Finance] 加载完成 ${cacheNote} - ${quotesRes.totalCount} 单 - ${dt}ms`);
         if (quotes.value.length === 0) {
           errorMsg.value = '报价系统暂无数据。请先在 Squirrel Designer 报价系统里报价。';
         }
@@ -945,6 +957,18 @@ createApp({
         loading.value = false;
       }
     }
+
+    // 加载更多 (分页 +50)
+    function loadMore() {
+      pageSize.value = Math.min(pageSize.value + PAGE_SIZE, filteredQuotes.value.length);
+    }
+
+    // 监听 filter/sort 变化, 重置分页
+    function resetPagination() {
+      pageSize.value = PAGE_SIZE;
+    }
+    // 监听 activeTab / searchQuery 变化, 自动重置分页
+    watch([activeTab, searchQuery], resetPagination);
 
     // ============ Filtering / Sorting ============
     const filteredQuotes = computed(() => {
@@ -1000,8 +1024,10 @@ createApp({
       return result;
     });
 
-    // Pagination (just first 500 for now)
-    const pagedQuotes = computed(() => filteredQuotes.value.slice(0, 500));
+    // Pagination: 默认 50 行/页, 滚动到底部时加载更多
+    const PAGE_SIZE = 50;
+    const pageSize = ref(PAGE_SIZE);
+    const pagedQuotes = computed(() => filteredQuotes.value.slice(0, pageSize.value));
 
     // ============ KPIs ============
     const totalAmount = computed(() => filteredQuotes.value.reduce((s, q) => s + (q.total || 0), 0));
@@ -1077,18 +1103,10 @@ createApp({
       searchTimer = setTimeout(() => {}, 200);
     }
 
-    // ============ Preview ============
-    async function openPreview(q) {
-      try {
-        const res = await callGAS('getQuoteDetail', { username: q.createdBy, projNo: q.projNo });
-        if (res.success) {
-          previewQuote.value = res.quote;
-        } else {
-          alert('加载报价失败: ' + res.message);
-        }
-      } catch (e) {
-        alert('加载报价失败: ' + e.message);
-      }
+    // ============ Preview (直接用 list 数据, 不再二次 API 调用) ============
+    function openPreview(q) {
+      // ✅ 优化: list API 已经返回 items, 直接用, 0ms 等待
+      previewQuote.value = q;
     }
     function closePreview() {
       previewQuote.value = null;
@@ -1600,12 +1618,14 @@ createApp({
         return;
       }
       loadData();
+      // 5 分钟后后台静默预热 (保持缓存新鲜), 不打扰用户
+      setTimeout(() => { loadData().catch(err => console.warn('预热失败', err)); }, 5 * 60 * 1000);
     });
 
     return {
       quotes, users, loading, errorMsg, searchQuery, activeTab,
       sortKey, sortDir, toggleSort, sortArrow,
-      filteredQuotes, pagedQuotes,
+      filteredQuotes, pagedQuotes, pageSize, loadMore,
       totalAmount, totalDeposit, todayNewCount,
       filters, activeFilter, filterOptions, filterPopoverStyle,
       toggleFilter, toggleFilterValue, toggleAllFilter, applyFilter,
