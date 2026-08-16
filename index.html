@@ -1103,10 +1103,19 @@ createApp({
       searchTimer = setTimeout(() => {}, 200);
     }
 
-    // ============ Preview (直接用 list 数据, 不再二次 API 调用) ============
-    function openPreview(q) {
-      // ✅ 优化: list API 已经返回 items, 直接用, 0ms 等待
-      previewQuote.value = q;
+    // ============ Preview (调 getQuoteDetail, 单份也加 cache) ============
+    async function openPreview(q) {
+      previewQuote.value = q;  // 先用 list 数据占位 (没 items 但有基本信息)
+      try {
+        const res = await callGAS('getQuoteDetail', { username: q.createdBy, projNo: q.projNo });
+        if (res.success) {
+          previewQuote.value = res.quote;
+        } else {
+          alert('加载报价失败: ' + res.message);
+        }
+      } catch (e) {
+        alert('加载报价失败: ' + e.message);
+      }
     }
     function closePreview() {
       previewQuote.value = null;

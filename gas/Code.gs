@@ -73,36 +73,8 @@ function isSkipFile(name) {
   return SKIP_FILES.indexOf(name) >= 0;
 }
 
-// 从 quote JSON 提取摘要字段（含 items 关键字段, 供预览用, 省一次 getQuoteDetail 调用）
+// 从 quote JSON 提取摘要字段（不含 items 数组, 避免超过 CacheService 100KB 限制）
 function extractQuoteSummary(quote, folderName) {
-  // items 轻量化: 只保留预览需要的字段
-  const slimItems = (quote.items || []).map(function(it) {
-    return {
-      id: it.id,
-      area: it.area,
-      itemB: it.itemB,
-      name: it.name,
-      productName: it.productName,
-      description: it.description,
-      spec: it.spec,
-      specification: it.specification,
-      remarks: it.remarks,
-      noteA: it.noteA,
-      noteB: it.noteB,
-      w: it.w || 0,
-      h: it.h || 0,
-      d: it.d || 0,
-      value: it.value || 0,
-      qty: it.qty || it.quantity || 1,
-      quantity: it.quantity,
-      unitPrice: it.unitPrice || it.price || 0,
-      price: it.price,
-      total: it.total || it.subtotal || 0,
-      subtotal: it.subtotal,
-      algorithm: it.algorithm
-    };
-  });
-
   return {
     id: quote.id || '',
     projNo: quote.projNo || '',
@@ -131,7 +103,8 @@ function extractQuoteSummary(quote, folderName) {
     createdBy: folderName,
     lastSynced: quote.lastSynced || '',
     lastModified: quote.lastModified || '',
-    items: slimItems,  // ✅ 含 items 供预览用, 省一次 getQuoteDetail 调用
+    // ⚠️ items 故意不返回 (避免 66 quote × items 超过 100KB CacheService 限制)
+    // 预览时调 getQuoteDetail (单份, 也加 cache)
     isFinal: !!(quote.id && String(quote.id).indexOf('final_') === 0)
   };
 }
@@ -249,15 +222,22 @@ function getAllQuotesSummary(nocache) {
   }
 }
 
-// 4. 拉单份完整 quote（备用, 现在 list API 已经返回 items, 一般不用）
-function getQuoteDetail(username, projNo) {
+// 4. 拉单份完整 quote（预览用, 含 items / fees 等, 也加 cache 5min）
+function getQuoteDetail(username, projNo, nocache) {
   try {
-    const init = initializeFolders();
-    if (!init.success) return init;
-
     if (!username || !projNo) {
       return { success: false, message: 'username 和 projNo 必填' };
     }
+
+    // cache key 包含 username + projNo
+    const cacheKey = 'quote_detail_' + username + '_' + projNo + '_v1';
+    if (!nocache) {
+      const cached = cacheGet(cacheKey);
+      if (cached) return { success: true, quote: cached, cached: true };
+    }
+
+    const init = initializeFolders();
+    if (!init.success) return init;
 
     const userFolders = mainFolder.getFoldersByName(username);
     if (!userFolders.hasNext()) {
@@ -275,7 +255,10 @@ function getQuoteDetail(username, projNo) {
     quote.createdBy = username;
     quote._lastModified = file.getLastUpdated().toISOString();
 
-    return { success: true, quote: quote };
+    // 单份 quote 一般 <50KB, cache 安全
+    cachePut(cacheKey, quote, CACHE_TTL_SEC);
+
+    return { success: true, quote: quote, cached: false };
   } catch (error) {
     return { success: false, message: error.toString() };
   }
@@ -350,7 +333,7 @@ function doGet(e) {
         result = getAllQuotesSummary(nocache);
         break;
       case 'getQuoteDetail':
-        result = getQuoteDetail(e.parameter.username, e.parameter.projNo);
+        result = getQuoteDetail(e.parameter.username, e.parameter.projNo, nocache);
         break;
       default:
         result = { success: false, message: '未知 action: ' + action };
