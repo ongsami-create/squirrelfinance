@@ -87,6 +87,30 @@
     align-items: center;
     flex-wrap: wrap;
   }
+  .cache-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.04);
+    color: var(--mac-text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    cursor: help;
+  }
+  .cache-info .dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #aaa;
+  }
+  .cache-info .dot.local { background: var(--mac-green); }
+  .cache-info .dot.gas-cache,
+  .cache-info .dot.gas-summary { background: var(--mac-accent); }
+  .cache-info .dot.gas-rebuild { background: var(--mac-orange); }
   .search-box {
     flex: 1;
     min-width: 280px;
@@ -715,6 +739,10 @@
     <button class="btn-secondary btn" @click="exportToExcel" :disabled="loading || filteredQuotes.length === 0">
       📊 导出 Excel
     </button>
+    <span v-if="cacheInfo.source !== 'none'" class="cache-info" :title="'数据源: ' + cacheInfo.source">
+      <span class="dot" :class="cacheInfo.source"></span>
+      {{ formatCacheAge(cacheInfo.ts) }}
+    </span>
   </div>
 
   <!-- KPI Cards -->
@@ -1058,7 +1086,26 @@ createApp({
       status: []
     });
 
-    // ============ Data Loading ============
+    // ============ Data Loading (v1.2: localStorage 缓存 + 后台静默刷新) ============
+    const CACHE_KEY = 'squirrel_finance_data_v1';
+    const CACHE_TTL = 10 * 60 * 1000;  // 10 分钟
+    const cacheInfo = ref({ source: 'none', ts: 0 });  // 'local' | 'gas-cache' | 'gas-summary' | 'gas-rebuild' | 'none'
+
+    function readLocalCache() {
+      try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        if (Date.now() - data.ts > CACHE_TTL) return null;  // 过期
+        return data;
+      } catch (e) { return null; }
+    }
+    function writeLocalCache(data) {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ ...data, ts: Date.now() }));
+      } catch (e) { console.warn('localStorage 写入失败', e); }
+    }
+
     async function callGAS(action, params = {}) {
       const url = new URL(GAS_URL);
       url.searchParams.set('action', action);
@@ -1067,23 +1114,53 @@ createApp({
       return await res.json();
     }
 
+    // 后台静默刷新 (不显示 loading, 失败静默)
+    async function refreshInBackground() {
+      try {
+        const res = await callGAS('getAllQuotesSummary');
+        if (res.success) {
+          quotes.value = res.quotes;
+          if (res.users) users.value = res.users;
+          writeLocalCache({ quotes: res.quotes, users: res.users || users.value, generatedAt: res.generatedAt });
+          cacheInfo.value = { source: res.source || 'gas', ts: Date.now() };
+          console.log(`[Squirrel Finance] 后台刷新完成 (${res.source}) - ${res.totalCount} 单`);
+        }
+      } catch (e) {
+        console.warn('[Squirrel Finance] 后台刷新失败 (不影响 UI)', e);
+      }
+    }
+
     async function loadData(forceRefresh) {
-      loading.value = true;
       errorMsg.value = '';
       const t0 = performance.now();
+
+      // 1. 优先读 localStorage (二次打开秒开, <200ms)
+      if (!forceRefresh) {
+        const local = readLocalCache();
+        if (local) {
+          quotes.value = local.quotes;
+          users.value = local.users || [];
+          cacheInfo.value = { source: 'local', ts: local.ts };
+          const dt = Math.round(performance.now() - t0);
+          console.log(`[Squirrel Finance] 从 localStorage 加载 (${dt}ms) - ${local.quotes.length} 单 - 缓存于 ${new Date(local.ts).toLocaleTimeString()}`);
+          // 后台静默拉新数据 (不阻塞 UI)
+          setTimeout(refreshInBackground, 100);
+          return;
+        }
+      }
+
+      // 2. localStorage 没数据 / 强制刷新, 调 GAS
+      loading.value = true;
       try {
         const nocacheParam = forceRefresh ? '&nocache=1' : '';
-        const [usersRes, quotesRes] = await Promise.all([
-          callGAS('getDetailedUsers'),
-          callGAS('getAllQuotesSummary' + nocacheParam)
-        ]);
-        if (!usersRes.success) throw new Error(usersRes.message);
-        if (!quotesRes.success) throw new Error(quotesRes.message);
-        users.value = usersRes.users;
-        quotes.value = quotesRes.quotes;
+        const res = await callGAS('getAllQuotesSummary' + nocacheParam);
+        if (!res.success) throw new Error(res.message);
+        quotes.value = res.quotes;
+        if (res.users) users.value = res.users;
+        writeLocalCache({ quotes: res.quotes, users: res.users || users.value, generatedAt: res.generatedAt });
+        cacheInfo.value = { source: res.source || 'gas', ts: Date.now() };
         const dt = Math.round(performance.now() - t0);
-        const cacheNote = quotesRes.cached ? '(缓存命中)' : '(实时)';
-        console.log(`[Squirrel Finance] 加载完成 ${cacheNote} - ${quotesRes.totalCount} 单 - ${dt}ms`);
+        console.log(`[Squirrel Finance] 加载完成 (${res.source}) - ${res.totalCount} 单 - ${dt}ms`);
         if (quotes.value.length === 0) {
           errorMsg.value = '报价系统暂无数据。请先在 Squirrel Designer 报价系统里报价。';
         }
@@ -1757,15 +1834,25 @@ createApp({
         return dt.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
       } catch { return d; }
     }
+    // 把 cache 时间戳格式化成"X 分钟前"
+    function formatCacheAge(ts) {
+      if (!ts) return '';
+      const diff = Date.now() - ts;
+      const sec = Math.floor(diff / 1000);
+      if (sec < 60) return '刚刚';
+      const min = Math.floor(sec / 60);
+      if (min < 60) return min + ' 分钟前';
+      const hr = Math.floor(min / 60);
+      if (hr < 24) return hr + ' 小时前';
+      return Math.floor(hr / 24) + ' 天前';
+    }
 
     onMounted(() => {
       if (GAS_URL === 'YOUR_GAS_WEB_APP_URL_HERE') {
         errorMsg.value = '⚠️ 请先在 index.html 里配置 GAS_URL (GAS 部署后获取的 Web App URL)';
         return;
       }
-      loadData();
-      // 5 分钟后后台静默预热 (保持缓存新鲜), 不打扰用户
-      setTimeout(() => { loadData().catch(err => console.warn('预热失败', err)); }, 5 * 60 * 1000);
+      loadData();  // 内部已经会: localStorage 命中 → 100ms 显示 → 后台静默刷
     });
 
     return {
@@ -1773,6 +1860,7 @@ createApp({
       sortKey, sortDir, toggleSort, sortArrow,
       filteredQuotes, pagedQuotes, pageSize, loadMore,
       totalAmount, totalDeposit, todayNewCount,
+      cacheInfo, formatCacheAge,
       filters, activeFilter, filterOptions, filterPopoverStyle,
       toggleFilter, toggleFilterValue, toggleAllFilter, applyFilter,
       onSearchInput,

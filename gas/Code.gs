@@ -1,14 +1,14 @@
 // ========================================
 // Squirrel Finance - Google Apps Script Backend
 // 完全只读 — 财务订单查询系统专用
-// 读取 Squirrel Designer Drive 数据，不写任何内容
-// 优化版 (v1.1): CacheService 缓存 + items 内联 + nocache 参数
+// 优化版 (v1.2): 预聚合 summary.json + CacheService + items 内联 + nocache
 // ========================================
 
 const CONFIG = {
   MAIN_FOLDER: 'Squirrel Designer',
   USERS_FILE: 'users.json',
   ADMIN_FOLDER: 'admin',
+  SUMMARY_FILE: 'finance_summary.json',   // ⭐ v1.2 新增: 预聚合文件
   SYSTEM_RESERVED: ['admin', 'squirrel analysis', 'Commission', 'offline_user']
 };
 
@@ -53,8 +53,6 @@ function isValidUserFolder(folderName) {
 }
 
 // ============ CacheService helpers (跨调用持久化) ============
-// GAS Web App 每次 HTTP 请求都是新执行上下文, 模块级 let 变量会被重置
-// 必须用 CacheService 才能跨调用复用
 function cacheGet(key) {
   try {
     const v = CacheService.getScriptCache().get(key);
@@ -68,7 +66,7 @@ function cachePut(key, value, ttl) {
 }
 
 // 跳过系统/缓存文件
-const SKIP_FILES = ['stats_cache.json','users.json','activity_logs.json','admin_logs.json','products.json'];
+const SKIP_FILES = ['stats_cache.json','users.json','activity_logs.json','admin_logs.json','products.json', CONFIG.SUMMARY_FILE];
 function isSkipFile(name) {
   return SKIP_FILES.indexOf(name) >= 0;
 }
@@ -103,10 +101,127 @@ function extractQuoteSummary(quote, folderName) {
     createdBy: folderName,
     lastSynced: quote.lastSynced || '',
     lastModified: quote.lastModified || '',
-    // ⚠️ items 故意不返回 (避免 66 quote × items 超过 100KB CacheService 限制)
-    // 预览时调 getQuoteDetail (单份, 也加 cache)
     isFinal: !!(quote.id && String(quote.id).indexOf('final_') === 0)
   };
+}
+
+// ==================== 核心: 预聚合 (v1.2) ====================
+
+// ⭐ 重建 summary: 遍历 80 个 quote, 写一个 summary.json (~60KB)
+function rebuildSummary() {
+  const init = initializeFolders();
+  if (!init.success) return init;
+
+  const quotes = [];
+  const userMap = {};
+
+  // 遍历用户
+  usersCache.users.forEach(function(u) {
+    userMap[u.username] = {
+      username: u.username,
+      displayName: u.displayName || u.username,
+      isActive: u.isActive !== false,
+      isAdmin: u.isAdmin || false,
+      quoteCount: 0
+    };
+  });
+
+  const subFolders = mainFolder.getFolders();
+  while (subFolders.hasNext()) {
+    const folder = subFolders.next();
+    const folderName = folder.getName();
+    if (!isValidUserFolder(folderName)) continue;
+
+    const files = folder.getFiles();
+    while (files.hasNext()) {
+      const file = files.next();
+      const name = file.getName();
+      if (!name.endsWith('.json') || isSkipFile(name)) continue;
+
+      try {
+        const quote = JSON.parse(file.getBlob().getDataAsString());
+        if (!quote.projNo && !quote.id) continue;
+        const summary = extractQuoteSummary(quote, folderName);
+        quotes.push(summary);
+        if (userMap[folderName]) userMap[folderName].quoteCount++;
+      } catch (parseErr) {}
+    }
+  }
+
+  // 按日期倒序
+  quotes.sort(function(a, b) {
+    const da = new Date(a.date || a.createdAt || a.lastModified || 0);
+    const db = new Date(b.date || b.createdAt || b.lastModified || 0);
+    return db - da;
+  });
+
+  // 过滤: 只保留有 quote 的活跃用户
+  const activeUsers = Object.values(userMap).filter(function(u) {
+    return u.isActive && u.quoteCount > 0;
+  });
+
+  const summaryData = {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    totalCount: quotes.length,
+    quotes: quotes,
+    users: activeUsers
+  };
+
+  // 写 summary.json (覆盖旧文件)
+  const oldFiles = adminFolder.getFilesByName(CONFIG.SUMMARY_FILE);
+  while (oldFiles.hasNext()) oldFiles.next().setTrashed(true);
+  adminFolder.createFile(CONFIG.SUMMARY_FILE, JSON.stringify(summaryData), false);
+
+  return { success: true, totalCount: quotes.length, generatedAt: summaryData.generatedAt };
+}
+
+// ⭐ 读 summary (1 个 Drive read, <100ms)
+function getSummary() {
+  try {
+    const init = initializeFolders();
+    if (!init.success) return init;
+
+    const files = adminFolder.getFilesByName(CONFIG.SUMMARY_FILE);
+    if (!files.hasNext()) {
+      // summary 不存在, 自动重建一次
+      const rebuild = rebuildSummary();
+      if (!rebuild.success) return rebuild;
+      // 再读
+      const files2 = adminFolder.getFilesByName(CONFIG.SUMMARY_FILE);
+      if (!files2.hasNext()) {
+        return { success: false, message: 'rebuild 后仍找不到 summary.json' };
+      }
+      const data = JSON.parse(files2.next().getBlob().getDataAsString());
+      return {
+        success: true,
+        quotes: data.quotes,
+        users: data.users,
+        totalCount: data.totalCount,
+        generatedAt: data.generatedAt,
+        source: 'rebuild-fresh'
+      };
+    }
+
+    const data = JSON.parse(files.next().getBlob().getDataAsString());
+    return {
+      success: true,
+      quotes: data.quotes,
+      users: data.users,
+      totalCount: data.totalCount,
+      generatedAt: data.generatedAt,
+      source: 'summary-json'
+    };
+  } catch (error) {
+    return { success: false, message: error.toString() };
+  }
+}
+
+// ⭐ 自动定时 rebuild (5 分钟一次, 装在 GAS trigger 里)
+function scheduledRebuildSummary() {
+  const r = rebuildSummary();
+  Logger.log('scheduledRebuildSummary: ' + JSON.stringify(r));
+  return r;
 }
 
 // ==================== API ====================
@@ -117,62 +232,46 @@ function ping() {
     success: true,
     message: 'Squirrel Finance API is running',
     timestamp: new Date().toISOString(),
-    version: '1.1.0'  // 优化版
+    version: '1.2.0'
   };
 }
 
-// 2. 列所有用户 + 每人的 quote 数量 (用 cache 5min)
-function getDetailedUsers() {
+// 2. 拉摘要 (前端主入口, 走预聚合 + CacheService)
+// ⚠️ v1.2 改: 优先读 summary.json (1 个 Drive read), 不是遍历 80 个文件
+function getAllQuotesSummary(nocache) {
   try {
-    const cached = cacheGet('detailed_users_v1');
-    if (cached) return { success: true, users: cached, totalCount: cached.length, cached: true };
+    // 1. 优先用 CacheService (5min 内秒开)
+    if (!nocache) {
+      const cached = cacheGet('all_quotes_summary_v2');
+      if (cached) return { success: true, quotes: cached.quotes, users: cached.users, totalCount: cached.quotes.length, generatedAt: cached.generatedAt, source: 'cache' };
+    }
 
-    const init = initializeFolders();
-    if (!init.success) return init;
+    // 2. 读 summary.json (1 个 Drive read, ~60KB, <100ms)
+    const summary = getSummary();
+    if (!summary.success) {
+      // 3. summary 也没, fallback 到旧逻辑 (遍历 80 个文件)
+      return getAllQuotesSummaryLegacy(nocache);
+    }
 
-    const users = usersCache.users.map(function(u) {
-      const userFolders = mainFolder.getFoldersByName(u.username);
-      let quoteCount = 0;
-      if (userFolders.hasNext()) {
-        const folder = userFolders.next();
-        const files = folder.getFiles();
-        while (files.hasNext()) {
-          const file = files.next();
-          const name = file.getName();
-          if (!name.endsWith('.json') || isSkipFile(name)) continue;
-          try {
-            const data = JSON.parse(file.getBlob().getDataAsString());
-            if (data.projNo || data.id) quoteCount++;
-          } catch (e) {}
-        }
-      }
-      return {
-        username: u.username,
-        displayName: u.displayName || u.username,
-        isActive: u.isActive !== false,
-        isAdmin: u.isAdmin || false,
-        quoteCount: quoteCount
-      };
-    });
+    // 写缓存
+    cachePut('all_quotes_summary_v2', { quotes: summary.quotes, users: summary.users, generatedAt: summary.generatedAt }, CACHE_TTL_SEC);
 
-    const activeUsers = users.filter(function(u) { return u.isActive && u.quoteCount > 0; });
-    cachePut('detailed_users_v1', activeUsers, CACHE_TTL_SEC);
-
-    return { success: true, users: activeUsers, totalCount: activeUsers.length, cached: false };
+    return {
+      success: true,
+      quotes: summary.quotes,
+      users: summary.users,
+      totalCount: summary.totalCount,
+      generatedAt: summary.generatedAt,
+      source: summary.source
+    };
   } catch (error) {
     return { success: false, message: error.toString() };
   }
 }
 
-// 3. 一次拉所有用户的所有 quote 摘要（财务系统主入口, 列表页用, 带 items + cache 5min）
-function getAllQuotesSummary(nocache) {
+// 旧逻辑 (fallback, 保留兼容)
+function getAllQuotesSummaryLegacy(nocache) {
   try {
-    // 缓存命中
-    if (!nocache) {
-      const cached = cacheGet('all_quotes_summary_v1');
-      if (cached) return { success: true, quotes: cached.quotes, totalCount: cached.quotes.length, cached: true, cacheTime: cached.ts };
-    }
-
     const init = initializeFolders();
     if (!init.success) return init;
 
@@ -185,7 +284,6 @@ function getAllQuotesSummary(nocache) {
       if (!isValidUserFolder(folderName)) continue;
 
       const files = folder.getFiles();
-
       while (files.hasNext()) {
         const file = files.next();
         const name = file.getName();
@@ -195,42 +293,30 @@ function getAllQuotesSummary(nocache) {
           const quote = JSON.parse(file.getBlob().getDataAsString());
           if (!quote.projNo && !quote.id) continue;
           quotes.push(extractQuoteSummary(quote, folderName));
-        } catch (parseErr) {
-          // 跳过损坏文件
-        }
+        } catch (parseErr) {}
       }
     }
 
-    // 按日期倒序
     quotes.sort(function(a, b) {
       const da = new Date(a.date || a.createdAt || a.lastModified || 0);
       const db = new Date(b.date || b.createdAt || b.lastModified || 0);
       return db - da;
     });
 
-    // 写缓存 (timestamp 用于显示给用户)
-    cachePut('all_quotes_summary_v1', { quotes: quotes, ts: new Date().toISOString() }, CACHE_TTL_SEC);
-
-    return {
-      success: true,
-      quotes: quotes,
-      totalCount: quotes.length,
-      cached: false
-    };
+    return { success: true, quotes: quotes, totalCount: quotes.length, source: 'legacy-fallback' };
   } catch (error) {
     return { success: false, message: error.toString() };
   }
 }
 
-// 4. 拉单份完整 quote（预览用, 含 items / fees 等, 也加 cache 5min）
+// 3. 拉单份完整 quote (预览用, 带 cache 5min)
 function getQuoteDetail(username, projNo, nocache) {
   try {
     if (!username || !projNo) {
       return { success: false, message: 'username 和 projNo 必填' };
     }
 
-    // cache key 包含 username + projNo
-    const cacheKey = 'quote_detail_' + username + '_' + projNo + '_v1';
+    const cacheKey = 'quote_detail_' + username + '_' + projNo + '_v2';
     if (!nocache) {
       const cached = cacheGet(cacheKey);
       if (cached) return { success: true, quote: cached, cached: true };
@@ -255,7 +341,6 @@ function getQuoteDetail(username, projNo, nocache) {
     quote.createdBy = username;
     quote._lastModified = file.getLastUpdated().toISOString();
 
-    // 单份 quote 一般 <50KB, cache 安全
     cachePut(cacheKey, quote, CACHE_TTL_SEC);
 
     return { success: true, quote: quote, cached: false };
@@ -264,46 +349,31 @@ function getQuoteDetail(username, projNo, nocache) {
   }
 }
 
-// ==================== 调试用 API (备用) ====================
+// ==================== 调试用 API ====================
 
 function debugFiles() {
   try {
     const init = initializeFolders();
     if (!init.success) return init;
 
-    const result = { folders: [] };
+    const result = { folders: [], summaryFile: null };
+    const sumFiles = adminFolder.getFilesByName(CONFIG.SUMMARY_FILE);
+    if (sumFiles.hasNext()) {
+      const f = sumFiles.next();
+      result.summaryFile = { name: f.getName(), size: f.getSize(), updated: f.getLastUpdated().toISOString() };
+    }
+
     const subFolders = mainFolder.getFolders();
     while (subFolders.hasNext()) {
       const folder = subFolders.next();
       if (!isValidUserFolder(folder.getName())) continue;
 
       const folderName = folder.getName();
-      const folderInfo = { folder: folderName, files: [], count: 0, errors: [] };
-
+      const folderInfo = { folder: folderName, count: 0 };
       const files = folder.getFiles();
       while (files.hasNext()) {
         const file = files.next();
-        if (!file.getName().endsWith('.json')) continue;
-        folderInfo.count++;
-
-        try {
-          const content = file.getBlob().getDataAsString();
-          let parsed = null, parseOk = false;
-          try { parsed = JSON.parse(content); parseOk = true; }
-          catch (e) { folderInfo.errors.push({ file: file.getName(), error: 'JSON parse failed: ' + e.message }); }
-          if (folderInfo.files.length < 2) {
-            const sample = { name: file.getName(), size: content.length, parseOk };
-            if (parseOk && parsed) {
-              sample.keys = Object.keys(parsed);
-              sample.projNo = parsed.projNo || '';
-              sample.customerName = parsed.customerName || '';
-              sample.total = parsed.total;
-              sample.date = parsed.date || '';
-              sample.id = parsed.id || '';
-            }
-            folderInfo.files.push(sample);
-          }
-        } catch (e) { folderInfo.errors.push({ file: file.getName(), error: e.toString() }); }
+        if (file.getName().endsWith('.json')) folderInfo.count++;
       }
       result.folders.push(folderInfo);
     }
@@ -317,23 +387,32 @@ function doGet(e) {
   try {
     const action = (e && e.parameter && e.parameter.action) || 'ping';
     const nocache = e && e.parameter && e.parameter.nocache === '1';
+    const refresh = e && e.parameter && e.parameter.refresh === '1';
     let result;
 
     switch (action) {
       case 'ping':
         result = ping();
         break;
-      case 'debugFiles':
-        result = debugFiles();
-        break;
-      case 'getDetailedUsers':
-        result = getDetailedUsers();
-        break;
       case 'getAllQuotesSummary':
+        // ?refresh=1 强制重建 summary + 返回
+        if (refresh) {
+          const r = rebuildSummary();
+          if (!r.success) { result = r; break; }
+        }
         result = getAllQuotesSummary(nocache);
         break;
       case 'getQuoteDetail':
         result = getQuoteDetail(e.parameter.username, e.parameter.projNo, nocache);
+        break;
+      case 'rebuildSummary':
+        result = rebuildSummary();
+        break;
+      case 'getSummary':
+        result = getSummary();
+        break;
+      case 'debugFiles':
+        result = debugFiles();
         break;
       default:
         result = { success: false, message: '未知 action: ' + action };
