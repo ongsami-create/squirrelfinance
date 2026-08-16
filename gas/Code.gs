@@ -105,9 +105,22 @@ function extractQuoteSummary(quote, folderName) {
   };
 }
 
-// ==================== 核心: 预聚合 (v1.2) ====================
+// ==================== 核心: 预聚合 (v1.2.1 — PropertiesService) ====================
+// ⚠️ v1.2.0 用 Drive 写 summary.json 失败: GAS 部署"任何人"没 drive 写权限
+// v1.2.1 改用 PropertiesService (GAS 自带 key-value, 不需要 Drive 权限)
+//
+// PropertiesService 限制:
+//   - 单 property 9KB, 总 500KB per script
+//   - 永久保存 (没 TTL)
+//   - 不需要额外权限
+//
+// 60KB 摘要 → 拆 8 quotes/chunk ≈ 8KB, 共 8-10 个 property
 
-// ⭐ 重建 summary: 遍历 80 个 quote, 写一个 summary.json (~60KB)
+const PROP_PREFIX = 'sf_q_';  // squirrel finance quotes chunk
+const PROP_USERS = 'sf_users';
+const PROP_META = 'sf_meta';
+const PROP_CHUNK_SIZE = 8;     // 每 chunk 8 quotes (~8KB)
+
 function rebuildSummary() {
   const init = initializeFolders();
   if (!init.success) return init;
@@ -160,61 +173,75 @@ function rebuildSummary() {
     return u.isActive && u.quoteCount > 0;
   });
 
-  const summaryData = {
-    version: 1,
-    generatedAt: new Date().toISOString(),
+  // 拆 chunks 写 PropertiesService
+  const props = PropertiesService.getScriptProperties();
+  const totalChunks = Math.ceil(quotes.length / PROP_CHUNK_SIZE);
+  const propertiesToSet = {};
+  for (let i = 0; i < totalChunks; i++) {
+    const chunk = quotes.slice(i * PROP_CHUNK_SIZE, (i + 1) * PROP_CHUNK_SIZE);
+    propertiesToSet[PROP_PREFIX + i] = JSON.stringify(chunk);
+  }
+  propertiesToSet[PROP_USERS] = JSON.stringify(activeUsers);
+  propertiesToSet[PROP_META] = JSON.stringify({
     totalCount: quotes.length,
-    quotes: quotes,
-    users: activeUsers
-  };
+    chunks: totalChunks,
+    generatedAt: new Date().toISOString(),
+    version: 3
+  });
+  props.setProperties(propertiesToSet);
 
-  // 写 summary.json (覆盖旧文件)
-  const oldFiles = adminFolder.getFilesByName(CONFIG.SUMMARY_FILE);
-  while (oldFiles.hasNext()) oldFiles.next().setTrashed(true);
-  adminFolder.createFile(CONFIG.SUMMARY_FILE, JSON.stringify(summaryData), false);
-
-  return { success: true, totalCount: quotes.length, generatedAt: summaryData.generatedAt };
+  return { success: true, totalCount: quotes.length, generatedAt: propertiesToSet[PROP_META] ? JSON.parse(propertiesToSet[PROP_META]).generatedAt : null };
 }
 
-// ⭐ 读 summary (1 个 Drive read, <100ms)
 function getSummary() {
   try {
-    const init = initializeFolders();
-    if (!init.success) return init;
+    const props = PropertiesService.getScriptProperties().getProperties();
+    const metaStr = props[PROP_META];
 
-    const files = adminFolder.getFilesByName(CONFIG.SUMMARY_FILE);
-    if (!files.hasNext()) {
-      // summary 不存在, 自动重建一次
-      const rebuild = rebuildSummary();
-      if (!rebuild.success) return rebuild;
-      // 再读
-      const files2 = adminFolder.getFilesByName(CONFIG.SUMMARY_FILE);
-      if (!files2.hasNext()) {
-        return { success: false, message: 'rebuild 后仍找不到 summary.json' };
-      }
-      const data = JSON.parse(files2.next().getBlob().getDataAsString());
-      return {
-        success: true,
-        quotes: data.quotes,
-        users: data.users,
-        totalCount: data.totalCount,
-        generatedAt: data.generatedAt,
-        source: 'rebuild-fresh'
-      };
+    if (!metaStr) {
+      // 第一次, 自动重建
+      const r = rebuildSummary();
+      if (!r.success) return r;
+      return getSummary();  // 递归读
     }
 
-    const data = JSON.parse(files.next().getBlob().getDataAsString());
+    const meta = JSON.parse(metaStr);
+    const users = JSON.parse(props[PROP_USERS] || '[]');
+
+    const quotes = [];
+    for (let i = 0; i < meta.chunks; i++) {
+      const chunkStr = props[PROP_PREFIX + i];
+      if (chunkStr) {
+        const chunk = JSON.parse(chunkStr);
+        for (let j = 0; j < chunk.length; j++) quotes.push(chunk[j]);
+      }
+    }
+
     return {
       success: true,
-      quotes: data.quotes,
-      users: data.users,
-      totalCount: data.totalCount,
-      generatedAt: data.generatedAt,
-      source: 'summary-json'
+      quotes: quotes,
+      users: users,
+      totalCount: meta.totalCount,
+      generatedAt: meta.generatedAt,
+      source: 'properties-service'
     };
   } catch (error) {
     return { success: false, message: error.toString() };
   }
+}
+
+// 清理 PropertiesService (调试用)
+function clearSummaryProperties() {
+  const props = PropertiesService.getScriptProperties();
+  const all = props.getProperties();
+  const toDelete = Object.keys(all).filter(function(k) {
+    return k.indexOf('sf_') === 0;
+  });
+  if (toDelete.length) {
+    props.deleteAllProperties();
+    return { success: true, cleared: toDelete.length };
+  }
+  return { success: true, cleared: 0 };
 }
 
 // ⭐ 自动定时 rebuild (5 分钟一次, 装在 GAS trigger 里)
@@ -232,7 +259,7 @@ function ping() {
     success: true,
     message: 'Squirrel Finance API is running',
     timestamp: new Date().toISOString(),
-    version: '1.2.0'
+    version: '1.2.1'  // PropertiesService 替代 Drive 写文件
   };
 }
 
@@ -410,6 +437,9 @@ function doGet(e) {
         break;
       case 'getSummary':
         result = getSummary();
+        break;
+      case 'clearSummaryProperties':
+        result = clearSummaryProperties();
         break;
       case 'debugFiles':
         result = debugFiles();
