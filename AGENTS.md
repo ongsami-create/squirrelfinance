@@ -96,6 +96,39 @@ projects/32/squirrelfinance/
     └── index.html         # 前端单文件 SPA
 ```
 
+## 状态判定规则 (v1.3, 2026-08-22 业务确认)
+
+财务系统**只**按 `depositTotal / total` 比例判定 (不看 `orderedAt` / `completedAt`):
+
+| 定金比例 | 状态 | Badge 颜色 |
+|---|---|---|
+| 0% | 待报价 | 黄色 🟡 |
+| 1-99% | 部分付款 | 蓝色 🔵 |
+| 100% (容差 0.01) | 全部完款 | 绿色 🟢 |
+| 手动标坏账 | 坏账 | 红色 🔴 |
+
+**orderedAt 不参与**: 销售员"下单"按钮只用于内部流程 (工厂下单 + 安装追踪), 财务视图不看。
+
+## 坏账功能 (v1.3)
+
+- **存储**: PropertiesService (key: `sf_bad_<user>_<projNo>`), 永久 + 跨设备
+- **触发**: 表格操作列"💸 坏账"按钮 → 弹窗必填 reason → 调 `markBadDebt` API
+- **取消**: 已标行显示"🚫 取消坏账"按钮 → 调 `unmarkBadDebt` API
+- **查询**: `listBadDebts` 列出所有 (备用)
+- **合并逻辑**: `applyBadDebtToQuotes(quotes)` 在 getSummary / getAllQuotesSummary / getQuoteDetail 里都跑, 每个 quote 加 `isBad / badReason / badAt / badMarkedBy` 字段
+
+## 性能优化 (v1.2 + v1.2.1)
+
+4 层加速链路:
+1. 前端 localStorage 10min → <200ms (二次打开秒开)
+2. GAS CacheService 5min → 1.2s
+3. PropertiesService 永久 → 1.5s (源 source: 'properties-service')
+4. rebuildSummary 遍历 80 文件 → 15.5s (只跑一次)
+
+PropertiesService 拆 chunks (8 quotes/chunk), 单 property 9KB 限制。
+
 ## 历史
 
-- 2026-08-15 立项 — 财务订单查询系统 v1.0
+- 2026-08-22 v1.3 — 状态只看定金比例 + 坏账标记功能
+- 2026-08-16 v1.2 — PropertiesService 永久缓存 + localStorage 10min
+- 2026-08-15 v1.0 — 财务订单查询系统立项
