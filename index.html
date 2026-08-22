@@ -910,9 +910,11 @@
   <div v-if="activeFilter" class="filter-popover" :style="filterPopoverStyle" @click.stop>
     <h4>筛选: {{ activeFilter }}</h4>
     <label><input type="checkbox" @change="toggleAllFilter(activeFilter, $event)"> 全选/反选</label>
-    <label v-for="opt in filterOptions[activeFilter]" :key="opt">
-      <input type="checkbox" :checked="filters[activeFilter].includes(opt)" @change="toggleFilterValue(activeFilter, opt)">
-      {{ opt || '(空)' }}
+    <label v-for="opt in filterOptions[activeFilter]" :key="(typeof opt === 'object' ? opt.key : opt)">
+      <input type="checkbox"
+        :checked="filters[activeFilter].includes(typeof opt === 'object' ? opt.key : opt)"
+        @change="toggleFilterValue(activeFilter, typeof opt === 'object' ? opt.key : opt)">
+      {{ (typeof opt === 'object' ? opt.label : opt) || '(空)' }}
     </label>
     <div class="actions">
       <button class="btn" @click="applyFilter">应用</button>
@@ -1281,7 +1283,7 @@ createApp({
         result = result.filter(x => filters.customerContact.includes(x.customerContact || ''));
       }
       if (filters.status.length) {
-        result = result.filter(x => filters.status.includes(x.status || 'pending'));
+        result = result.filter(x => filters.status.includes(statusKey(x)));
       }
 
       // Sort
@@ -1341,7 +1343,13 @@ createApp({
       return {
         customerIC: opt('customerIC'),
         customerContact: opt('customerContact'),
-        status: ['pending', 'ordered', 'partial', 'completed']
+        // 状态选项固定 4 个 (跟 v1.3 业务规则一致)
+        status: [
+          { key: 'pending', label: '待报价' },
+          { key: 'partial', label: '部分付款' },
+          { key: 'paid', label: '全部完款' },
+          { key: 'bad', label: '坏账' }
+        ]
       };
     });
     const filterPopoverStyle = computed(() => ({
@@ -1365,10 +1373,12 @@ createApp({
     }
     function toggleAllFilter(key, ev) {
       const opts = filterOptions.value[key];
-      if (filters[key].length === opts.length) {
+      // 兼容 status 数组是 {key, label} 对象
+      const keys = opts.map(function(o) { return typeof o === 'object' ? o.key : o; });
+      if (filters[key].length === keys.length) {
         filters[key] = [];
       } else {
-        filters[key] = [...opts];
+        filters[key] = [...keys];
       }
     }
     function applyFilter() {
@@ -1932,27 +1942,30 @@ createApp({
 
     // ============ Status (v1.3: 只看定金比例 + 坏账) ============
     // 业务规则 (2026-08-22):
-    //   - 定金 0%        → 待报价
-    //   - 定金 1-99%     → 部分付款
-    //   - 定金 100%      → 全部完款
-    //   - 手动标"坏账"  → 坏账 (覆盖以上)
+    //   - 定金 0%        → 待报价 (pending)
+    //   - 定金 1-99%     → 部分付款 (partial)
+    //   - 定金 100%      → 全部完款 (paid)
+    //   - 手动标"坏账"  → 坏账 (bad, 覆盖以上)
     // 注: orderedAt 字段不用 (只用于内部流程标注: 工厂下单 + 安装追踪)
-    function statusLabel(q) {
-      if (q.isBad) return '坏账';
+    const STATUS_MAP = {
+      pending: '待报价',
+      partial: '部分付款',
+      paid: '全部完款',
+      bad: '坏账'
+    };
+    function statusKey(q) {
+      if (q.isBad) return 'bad';
       const dp = q.depositTotal || 0;
       const total = q.total || 0;
-      if (dp === 0 || total === 0) return '待报价';
-      // 浮点容差 0.01
-      if (dp >= total - 0.01) return '全部完款';
-      return '部分付款';
+      if (dp === 0 || total === 0) return 'pending';
+      if (dp >= total - 0.01) return 'paid';
+      return 'partial';
+    }
+    function statusLabel(q) {
+      return STATUS_MAP[statusKey(q)] || '待报价';
     }
     function statusBadgeClass(q) {
-      if (q.isBad) return 'badge badge-bad';
-      const dp = q.depositTotal || 0;
-      const total = q.total || 0;
-      if (dp === 0 || total === 0) return 'badge badge-pending';
-      if (dp >= total - 0.01) return 'badge badge-paid';
-      return 'badge badge-partial';
+      return 'badge badge-' + statusKey(q);
     }
 
     // ============ Formatters ============
