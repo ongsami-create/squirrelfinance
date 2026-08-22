@@ -353,6 +353,8 @@
   .badge-ordered { background: rgba(255, 59, 48, 0.12); color: #d70015; }
   .badge-completed { background: rgba(52, 199, 89, 0.15); color: #248a3d; }
   .badge-partial { background: rgba(0, 122, 255, 0.12); color: #0050b3; }
+  .badge-paid { background: rgba(48, 209, 88, 0.15); color: #1d6e3b; }       /* macOS green (全部完款) */
+  .badge-bad { background: rgba(255, 69, 58, 0.15); color: #b7000e; }          /* macOS red (坏账) */
 
   .btn-sm {
     padding: 5px 12px;
@@ -365,8 +367,30 @@
     font-weight: 500;
     box-shadow: 0 1px 2px rgba(0, 122, 255, 0.2);
     transition: all 0.15s;
+    margin-left: 4px;
   }
   .btn-sm:hover { background: var(--mac-accent-hover); box-shadow: 0 2px 6px rgba(0, 122, 255, 0.3); }
+  .btn-sm:first-child { margin-left: 0; }
+  .btn-sm.btn-bad-new {
+    background: rgba(255, 69, 58, 0.1);
+    color: #d70015;
+    box-shadow: none;
+    border: 0.5px solid rgba(255, 69, 58, 0.2);
+  }
+  .btn-sm.btn-bad-new:hover {
+    background: rgba(255, 69, 58, 0.18);
+    color: #b7000e;
+    box-shadow: 0 1px 3px rgba(255, 69, 58, 0.2);
+  }
+  .btn-sm.btn-bad-marked {
+    background: rgba(255, 69, 58, 0.15);
+    color: #b7000e;
+    box-shadow: none;
+  }
+  .btn-sm.btn-bad-marked:hover {
+    background: rgba(255, 69, 58, 0.25);
+    color: #8b000a;
+  }
 
   /* ========== Summary Row (macOS 风格) ========== */
   .summary-row {
@@ -836,6 +860,12 @@
             </td>
             <td class="col-actions">
               <button class="btn-sm" @click="openPreview(q)">👁 预览</button>
+              <button v-if="q.isBad" class="btn-sm btn-bad-marked" @click="unmarkBadDebt(q)" title="点击取消坏账标记">
+                🚫 取消坏账
+              </button>
+              <button v-else class="btn-sm btn-bad-new" @click="markBadDebt(q)" title="标记为坏账">
+                💸 坏账
+              </button>
             </td>
           </tr>
         </tbody>
@@ -1057,6 +1087,40 @@
       </div>
     </div>
   </div>
+
+  <!-- ========== Bad Debt Confirmation Modal (v1.3) ========== -->
+  <div v-if="badDebtTarget" class="modal-mask" @click.self="cancelBadDebtModal">
+    <div class="modal" style="width:480px;">
+      <div class="modal-header" style="background:rgba(255,69,58,0.95);color:#fff;">
+        <h3>💸 标记坏账 - {{ badDebtTarget.projNo }}</h3>
+        <button class="modal-close" @click="cancelBadDebtModal" style="color:#fff;">✕</button>
+      </div>
+      <div class="modal-body" style="padding:20px 24px;">
+        <div style="margin-bottom:14px;padding:12px;background:rgba(0,0,0,0.04);border-radius:8px;font-size:13px;">
+          <div><strong>客户:</strong> {{ badDebtTarget.customerName }}</div>
+          <div><strong>业务员:</strong> {{ badDebtTarget.salesperson || badDebtTarget.createdBy }}</div>
+          <div><strong>总金额:</strong> RM {{ formatMoney(badDebtTarget.total) }}</div>
+          <div><strong>已付定金:</strong> RM {{ formatMoney(badDebtTarget.depositTotal) }}</div>
+        </div>
+        <label style="display:block;font-size:12px;color:var(--mac-text-secondary);margin-bottom:6px;font-weight:600;letter-spacing:0.02em;text-transform:uppercase;">
+          坏账原因 (必填)
+        </label>
+        <textarea
+          v-model="badDebtReason"
+          placeholder="例如: 客户取消订单 / 联系不上 / 跑单 / 财务核销..."
+          rows="3"
+          style="width:100%;padding:10px 12px;border:0.5px solid var(--mac-border-strong);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;"
+        ></textarea>
+        <div style="margin-top:8px;font-size:11px;color:var(--mac-text-tertiary);">
+          ⚠️ 标记后该报价会标红"坏账"，财务可追溯。可随时取消标记。
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="cancelBadDebtModal">取消</button>
+        <button class="btn" style="background:#ff453a;" @click="confirmBadDebt">确认标记坏账</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1079,6 +1143,8 @@ createApp({
     const previewQuote = ref(null);
     const activeFilter = ref(null);
     const filterPopoverPos = ref({ x: 0, y: 0 });
+    const badDebtTarget = ref(null);    // { quote, reason } for confirmation modal
+    const badDebtReason = ref('');     // input field for bad debt reason
 
     const filters = reactive({
       customerIC: [],
@@ -1333,6 +1399,62 @@ createApp({
     }
     function closePreview() {
       previewQuote.value = null;
+    }
+
+    // ============ Bad Debt (坏账) 标记 (v1.3) ============
+    // 打开确认弹窗
+    function markBadDebt(q) {
+      badDebtTarget.value = q;
+      badDebtReason.value = '';
+    }
+    function cancelBadDebtModal() {
+      badDebtTarget.value = null;
+      badDebtReason.value = '';
+    }
+    // 确认标坏账: 调 GAS + 立即更新本地 + 写 localStorage
+    async function confirmBadDebt() {
+      const target = badDebtTarget.value;
+      if (!target) return;
+      const reason = (badDebtReason.value || '').trim();
+      if (!reason) { alert('请填写坏账原因'); return; }
+      try {
+        const res = await callGAS('markBadDebt', { username: target.createdBy, projNo: target.projNo, reason });
+        if (res.success) {
+          // 更新本地: 找到 quote, 加 isBad
+          const idx = quotes.value.findIndex(x => x.projNo === target.projNo && x.createdBy === target.createdBy);
+          if (idx >= 0) {
+            quotes.value[idx] = { ...quotes.value[idx], isBad: true, badReason: reason, badAt: res.ts };
+            // 触发响应式更新
+            quotes.value = [...quotes.value];
+          }
+          cancelBadDebtModal();
+        } else {
+          alert('标记失败: ' + res.message);
+        }
+      } catch (e) {
+        alert('标记失败: ' + e.message);
+      }
+    }
+    // 取消坏账
+    async function unmarkBadDebt(q) {
+      if (!confirm(`确认取消 ${q.projNo} 的坏账标记？`)) return;
+      try {
+        const res = await callGAS('unmarkBadDebt', { username: q.createdBy, projNo: q.projNo });
+        if (res.success) {
+          const idx = quotes.value.findIndex(x => x.projNo === q.projNo && x.createdBy === q.createdBy);
+          if (idx >= 0) {
+            delete quotes.value[idx].isBad;
+            delete quotes.value[idx].badReason;
+            delete quotes.value[idx].badAt;
+            quotes.value[idx] = { ...quotes.value[idx] };
+            quotes.value = [...quotes.value];
+          }
+        } else {
+          alert('取消失败: ' + res.message);
+        }
+      } catch (e) {
+        alert('取消失败: ' + e.message);
+      }
     }
     function totalDepositOf(q) {
       return (q.depositRecords || []).reduce((s, d) => s + (d.amount || 0), 0);
@@ -1808,18 +1930,29 @@ createApp({
       XLSX.writeFile(wb, `财务订单_${new Date().toISOString().slice(0,10)}.xlsx`);
     }
 
-    // ============ Status ============
+    // ============ Status (v1.3: 只看定金比例 + 坏账) ============
+    // 业务规则 (2026-08-22):
+    //   - 定金 0%        → 待报价
+    //   - 定金 1-99%     → 部分付款
+    //   - 定金 100%      → 全部完款
+    //   - 手动标"坏账"  → 坏账 (覆盖以上)
+    // 注: orderedAt 字段不用 (只用于内部流程标注: 工厂下单 + 安装追踪)
     function statusLabel(q) {
-      if (q.completedAt) return '已完成';
-      if (q.orderedAt) return '已下单';
-      if ((q.depositTotal || 0) > 0) return '部分付款';
-      return '待报价';
+      if (q.isBad) return '坏账';
+      const dp = q.depositTotal || 0;
+      const total = q.total || 0;
+      if (dp === 0 || total === 0) return '待报价';
+      // 浮点容差 0.01
+      if (dp >= total - 0.01) return '全部完款';
+      return '部分付款';
     }
     function statusBadgeClass(q) {
-      if (q.completedAt) return 'badge badge-completed';
-      if (q.orderedAt) return 'badge badge-ordered';
-      if ((q.depositTotal || 0) > 0) return 'badge badge-partial';
-      return 'badge badge-pending';
+      if (q.isBad) return 'badge badge-bad';
+      const dp = q.depositTotal || 0;
+      const total = q.total || 0;
+      if (dp === 0 || total === 0) return 'badge badge-pending';
+      if (dp >= total - 0.01) return 'badge badge-paid';
+      return 'badge badge-partial';
     }
 
     // ============ Formatters ============
@@ -1870,6 +2003,9 @@ createApp({
       depositRecordsData, poolSubtotal,
       printQuote, exportPreviewPDF, exportPreviewExcel, exportToExcel,
       statusLabel, statusBadgeClass, formatMoney, formatDate,
+      // Bad debt (v1.3)
+      markBadDebt, unmarkBadDebt, cancelBadDebtModal, confirmBadDebt,
+      badDebtTarget, badDebtReason,
       loadData
     };
   }

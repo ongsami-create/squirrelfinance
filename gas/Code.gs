@@ -217,6 +217,9 @@ function getSummary() {
       }
     }
 
+    // ⭐ v1.3: 合并坏账标记
+    applyBadDebtToQuotes(quotes);
+
     return {
       success: true,
       quotes: quotes,
@@ -244,6 +247,95 @@ function clearSummaryProperties() {
   return { success: true, cleared: 0 };
 }
 
+// ==================== 坏账标记 (v1.3) ====================
+// 存储位置: PropertiesService (key: sf_bad_<user>_<projNo>)
+// 原因: PropertiesService 永久, 跨设备共享, 不需要 Drive 权限
+
+function badDebtKey(username, projNo) {
+  return 'sf_bad_' + username + '_' + projNo;
+}
+
+// 读所有坏账标记 → 返回 { "user|projNo": { reason, ts, markedBy } }
+function getBadDebtMap() {
+  const props = PropertiesService.getScriptProperties().getProperties();
+  const map = {};
+  Object.keys(props).forEach(function(k) {
+    if (k.indexOf('sf_bad_') === 0) {
+      try {
+        const v = JSON.parse(props[k]);
+        map[k] = v;
+      } catch (e) {}
+    }
+  });
+  return map;
+}
+
+// 给 quotes 数组批量加 isBad / badReason / badAt 字段
+function applyBadDebtToQuotes(quotes) {
+  const map = getBadDebtMap();
+  for (let i = 0; i < quotes.length; i++) {
+    const q = quotes[i];
+    const key = badDebtKey(q.createdBy, q.projNo);
+    if (map[key]) {
+      q.isBad = true;
+      q.badReason = map[key].reason || '';
+      q.badAt = map[key].ts || '';
+      q.badMarkedBy = map[key].markedBy || '';
+    } else {
+      q.isBad = false;
+      delete q.badReason;
+      delete q.badAt;
+      delete q.badMarkedBy;
+    }
+  }
+  return quotes;
+}
+
+// 标记坏账
+function markBadDebt(username, projNo, reason) {
+  try {
+    if (!username || !projNo) {
+      return { success: false, message: 'username 和 projNo 必填' };
+    }
+    if (!reason || !reason.trim()) {
+      return { success: false, message: 'reason 必填' };
+    }
+    const ts = new Date().toISOString();
+    PropertiesService.getScriptProperties().setProperty(
+      badDebtKey(username, projNo),
+      JSON.stringify({ reason: reason.trim(), ts: ts, markedBy: 'finance' })
+    );
+    return { success: true, ts: ts };
+  } catch (error) {
+    return { success: false, message: error.toString() };
+  }
+}
+
+// 取消坏账
+function unmarkBadDebt(username, projNo) {
+  try {
+    if (!username || !projNo) {
+      return { success: false, message: 'username 和 projNo 必填' };
+    }
+    PropertiesService.getScriptProperties().deleteProperty(badDebtKey(username, projNo));
+    return { success: true };
+  } catch (error) {
+    return { success: false, message: error.toString() };
+  }
+}
+
+// 列出所有坏账 (备用)
+function listBadDebts() {
+  const map = getBadDebtMap();
+  const list = [];
+  Object.keys(map).forEach(function(k) {
+    const username = k.replace('sf_bad_', '').split('_')[0];
+    const projNo = k.replace('sf_bad_' + username + '_', '');
+    list.push({ username: username, projNo: projNo, ...map[k] });
+  });
+  return { success: true, list: list, count: list.length };
+}
+
 // ⭐ 自动定时 rebuild (5 分钟一次, 装在 GAS trigger 里)
 function scheduledRebuildSummary() {
   const r = rebuildSummary();
@@ -259,7 +351,7 @@ function ping() {
     success: true,
     message: 'Squirrel Finance API is running',
     timestamp: new Date().toISOString(),
-    version: '1.2.1'  // PropertiesService 替代 Drive 写文件
+    version: '1.3.0'  // 坏账标记功能
   };
 }
 
@@ -330,6 +422,9 @@ function getAllQuotesSummaryLegacy(nocache) {
       return db - da;
     });
 
+    // v1.3: 合并坏账标记
+    applyBadDebtToQuotes(quotes);
+
     return { success: true, quotes: quotes, totalCount: quotes.length, source: 'legacy-fallback' };
   } catch (error) {
     return { success: false, message: error.toString() };
@@ -367,6 +462,9 @@ function getQuoteDetail(username, projNo, nocache) {
     const quote = JSON.parse(file.getBlob().getDataAsString());
     quote.createdBy = username;
     quote._lastModified = file.getLastUpdated().toISOString();
+
+    // v1.3: 合并坏账标记
+    applyBadDebtToQuotes([quote]);
 
     cachePut(cacheKey, quote, CACHE_TTL_SEC);
 
@@ -440,6 +538,15 @@ function doGet(e) {
         break;
       case 'clearSummaryProperties':
         result = clearSummaryProperties();
+        break;
+      case 'markBadDebt':
+        result = markBadDebt(e.parameter.username, e.parameter.projNo, e.parameter.reason);
+        break;
+      case 'unmarkBadDebt':
+        result = unmarkBadDebt(e.parameter.username, e.parameter.projNo);
+        break;
+      case 'listBadDebts':
+        result = listBadDebts();
         break;
       case 'debugFiles':
         result = debugFiles();
